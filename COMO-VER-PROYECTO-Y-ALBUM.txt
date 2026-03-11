@@ -1,0 +1,22 @@
+CÓMO VER PROYECTO, ÁLBUM Y PERFIL GENERADO
+==========================================
+
+Para que aparezcan las funciones de Proyecto, Álbum y el Perfil generado,
+debe ejecutar la aplicación desde ESTA misma carpeta:
+
+  C:\Users\sadi7\OneDrive\Desktop\CEIPOL\PERFIL REMOTO\CURSOR PERFIL
+
+PASOS:
+------
+1. Abra una terminal (PowerShell o CMD) en esta carpeta.
+2. Ejecute:  npm run dev
+3. En el navegador abra:  http://localhost:3000
+
+Debería ver:
+- Botón "Nuevo Proyecto" (al inicio).
+- Después de crear un proyecto: bloque para agregar fotos y el "Álbum fotográfico" con casillas para seleccionar fotos.
+- Después de "Generar Análisis de Selección": la sección "Perfil criminológico generado" con el resumen en la misma página.
+
+Si en cambio ve una pantalla con "Clasificación del Entorno/Punto" y un solo botón "Generar Perfil Ambiental", está usando otra versión de la aplicación (flujo antiguo). En ese caso:
+- Si está en local: asegúrese de haber abierto y ejecutado desde la carpeta "CURSOR PERFIL" indicada arriba.
+- Si está en Vercel/Internet: el repositorio desplegado debe contener el código de esta carpeta (page.tsx con ProjectManager, ProjectProvider en layout, componentes ProjectManager, PhotoAlbum, CaptureAndAddPhoto, etc.). Suba o conecte el repo correcto y vuelva a desplegar.
