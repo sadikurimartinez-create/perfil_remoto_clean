@@ -4,6 +4,47 @@ import { useState } from "react";
 import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
 
+/** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
+async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      let dw = w;
+      let dh = h;
+      if (w > maxSize || h > maxSize) {
+        if (w >= h) {
+          dw = maxSize;
+          dh = Math.round((h * maxSize) / w);
+        } else {
+          dh = maxSize;
+          dw = Math.round((w * maxSize) / h);
+        }
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = dw;
+      canvas.height = dh;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        reject(new Error("No se pudo crear canvas"));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, dw, dh);
+      const dataUrl = canvas.toDataURL("image/jpeg", quality);
+      const i = dataUrl.indexOf(",");
+      resolve(i >= 0 ? dataUrl.slice(i + 1) : dataUrl);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Error al cargar la imagen"));
+    };
+    img.src = url;
+  });
+}
+
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -47,8 +88,12 @@ export function PhotoAlbum() {
         selected.map(async (p) => {
           let imageBase64: string | null = null;
           if (p.file) {
-            const sizeMb = p.file.size / (1024 * 1024);
-            if (sizeMb <= 20) imageBase64 = await readFileAsBase64(p.file);
+            try {
+              imageBase64 = await resizeImageToBase64(p.file, 640, 0.5);
+            } catch {
+              const sizeMb = p.file.size / (1024 * 1024);
+              if (sizeMb <= 2) imageBase64 = await readFileAsBase64(p.file);
+            }
           }
           return {
             id: p.id,

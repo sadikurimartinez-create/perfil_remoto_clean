@@ -1,12 +1,13 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 
 export function InstitutionalHeader() {
   return (
     <header className="w-full border-b border-slate-800 bg-slate-950/95">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
-        <div className="flex-shrink-0">
+        <div className="flex flex-shrink-0 items-center gap-2">
           <Image
             src="/logos/logo-ceipol.png"
             alt="Centro Estatal de Estudios y Política Criminal"
@@ -15,6 +16,12 @@ export function InstitutionalHeader() {
             className="h-12 w-12 object-contain sm:h-14 sm:w-14"
             unoptimized
           />
+          <Link
+            href="/incidencia"
+            className="text-[10px] sm:text-xs font-medium text-sky-400 hover:text-sky-300 underline underline-offset-2"
+          >
+            Cargar incidencia
+          </Link>
         </div>
         <div className="flex flex-1 flex-col items-center justify-center text-center min-w-0">
           <h1 className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl">
