@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/localDb";
+import { useAuth } from "@/context/AuthContext";
 
 type ProjectWithCount = {
   id: string;
@@ -19,8 +20,13 @@ export function ProjectList() {
   const router = useRouter();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
-  // TODO: sustituir por el usuario autenticado real
-  const currentUser = { id: "demo-user", role: "USER" as const };
+  const { user, loading } = useAuth();
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.replace("/login");
+    }
+  }, [loading, user, router]);
 
   const projectsWithCount = useLiveQuery(
     async (): Promise<ProjectWithCount[]> => {
@@ -51,7 +57,7 @@ export function ProjectList() {
       id,
       name: nombre,
       createdAt: Date.now(),
-      createdBy: currentUser.id,
+      createdBy: String(user!.id),
     });
     setShowPrompt(false);
     setNombreInput("");
@@ -76,6 +82,18 @@ export function ProjectList() {
   };
 
   const list = projectsWithCount ?? [];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px] text-slate-400">
+        Verificando sesión…
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
 
   return (
     <div className="space-y-6">
@@ -117,7 +135,7 @@ export function ProjectList() {
             <ul className="grid gap-3 sm:grid-cols-2">
               {list.map((p) => {
                 const isLockedByOther =
-                  p.lockedBy && p.lockedBy !== currentUser.id;
+                  p.lockedBy && p.lockedBy !== String(user.id);
                 return (
                   <li
                     key={p.id}

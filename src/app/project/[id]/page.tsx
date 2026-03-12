@@ -9,6 +9,7 @@ import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
 import { db, type AnalysisRow } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -18,8 +19,7 @@ export default function ProjectWorkspacePage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [lockedByOther, setLockedByOther] = useState<string | null>(null);
-  // TODO: sustituir por usuario autenticado real
-  const currentUser = { id: "demo-user", role: "USER" as const };
+  const { user, loading: loadingAuth } = useAuth();
 
   const analyses = useLiveQuery(
     async (): Promise<AnalysisRow[]> => {
@@ -35,6 +35,12 @@ export default function ProjectWorkspacePage() {
 
   useEffect(() => {
     if (!projectId) return;
+    if (!user && !loadingAuth) {
+      router.replace("/login");
+      return;
+    }
+    if (!user) return;
+
     let cancelled = false;
     (async () => {
       try {
@@ -45,12 +51,16 @@ export default function ProjectWorkspacePage() {
           return;
         }
 
-        if (row.lockedBy && row.lockedBy !== currentUser.id) {
+        if (
+          row.lockedBy &&
+          row.lockedBy !== String(user.id) &&
+          user.role !== "ADMIN"
+        ) {
           setLockedByOther(row.lockedBy);
           return;
         }
 
-        await db.projects.update(projectId, { lockedBy: currentUser.id });
+        await db.projects.update(projectId, { lockedBy: String(user.id) });
         await loadProject(projectId);
       } catch (e) {
         if (!cancelled) setNotFound(true);
@@ -61,7 +71,7 @@ export default function ProjectWorkspacePage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, loadProject, currentUser.id]);
+  }, [projectId, loadProject, user, loadingAuth, router]);
 
   const handleDeletePhoto = async (id: string) => {
     if (!confirm("¿Eliminar esta fotografía del expediente?")) return;
@@ -73,7 +83,7 @@ export default function ProjectWorkspacePage() {
     removePhotoFromAlbum(id);
   };
 
-  if (loading) {
+  if (loading || loadingAuth) {
     return (
       <div className="flex items-center justify-center min-h-[200px] text-slate-400">
         Cargando expediente…

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { InstitutionalHeader } from "@/components/InstitutionalHeader";
 import { ProjectProvider } from "@/context/ProjectContext";
+import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
   title: "Perfilador Remoto",
@@ -17,12 +18,14 @@ export default function RootLayout({
   return (
     <html lang="es" className="dark">
       <body className="min-h-screen bg-slate-950 text-slate-100">
-        <InstitutionalHeader />
-        <ProjectProvider>
-          <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-4 py-6 md:py-10">
-            {children}
-          </main>
-        </ProjectProvider>
+        <AuthProvider>
+          <InstitutionalHeader />
+          <ProjectProvider>
+            <main className="mx-auto flex min-h-screen max-w-4xl flex-col gap-6 px-4 py-6 md:py-10">
+              {children}
+            </main>
+          </ProjectProvider>
+        </AuthProvider>
       </body>
     </html>
   );
