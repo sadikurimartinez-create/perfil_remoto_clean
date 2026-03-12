@@ -24,7 +24,10 @@ export function ProjectList() {
 
   const projectsWithCount = useLiveQuery(
     async (): Promise<ProjectWithCount[]> => {
-      const projects = await db.projects.orderBy("createdAt").reverse().toArray();
+      const projects = await db.projects
+        .orderBy("createdAt")
+        .reverse()
+        .toArray();
       return Promise.all(
         projects.map(async (p) => ({
           ...p,
@@ -81,7 +84,8 @@ export function ProjectList() {
           Mis Expedientes
         </h2>
         <p className="text-sm text-slate-400 max-w-2xl">
-          Proyectos guardados localmente. Abra uno para agregar o eliminar fotografías y generar el análisis.
+          Proyectos guardados localmente. Abra uno para agregar o eliminar
+          fotografías y generar el análisis.
         </p>
       </header>
 
@@ -155,7 +159,7 @@ export function ProjectList() {
                       </button>
                       <button
                         type="button"
-                        disabled={isLockedByOther}
+                        disabled={!!isLockedByOther}
                         onClick={() => {
                           if (!isLockedByOther) router.push(`/project/${p.id}`);
                         }}
