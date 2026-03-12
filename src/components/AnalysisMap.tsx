@@ -93,6 +93,7 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           }}
         />
 
+        {/* Marcadores de cada fotografía seleccionada (evidencia) */}
         {album.map((p) => (
           <Marker
             key={p.id}
@@ -145,27 +146,38 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
 
       <div className="p-3 border-t border-slate-700 space-y-2">
         <p className="text-xs text-slate-400">
-          {album.length} punto(s) del levantamiento y{" "}
-          {analysisResult?.historicalCrimes?.length ?? 0} incidentes históricos
-          en la capa de calor.
+          {album.length} punto(s) de evidencia fotográfica y{" "}
+          {analysisResult?.historicalCrimes?.length ?? 0} incidentes
+          históricos representados en el mapa.
         </p>
-        <ul className="text-xs text-slate-500 space-y-1">
-          {album.map((p) => {
-            const finding = perPhotoMap.get(p.id);
-            return (
-              <li key={p.id}>
-                <span className="font-mono">
-                  {p.lat.toFixed(5)}, {p.lng.toFixed(5)}
-                </span>
-                {" · "}
-                {p.tipo}
-                {finding?.visionLabels?.length
-                  ? ` · Vision: ${finding.visionLabels.slice(0, 3).join(", ")}`
-                  : ""}
-              </li>
-            );
-          })}
-        </ul>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-3 w-3 rounded-full bg-red-500" />
+            <span className="text-slate-400">
+              <span className="font-semibold text-slate-200">Evidencia:</span>{" "}
+              Ubicación de las fotografías tomadas.
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-3 w-3 rounded-full bg-sky-400" />
+            <span className="text-slate-400">
+              <span className="font-semibold text-slate-200">Atractores:</span>{" "}
+              Escuelas, comercios y otros puntos de interés (POIs).
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-3 w-3 rounded-full bg-red-900" />
+            <span className="text-slate-400">
+              <span className="font-semibold text-slate-200">Incidencia:</span>{" "}
+              Delitos históricos en la zona analizada.
+            </span>
+          </div>
+        </div>
+        <p className="text-xs text-slate-400 mt-1">
+          Representación geoespacial del polígono de estudio en un radio de 500
+          metros a partir de los indicios fotográficos, ilustrando la
+          convergencia entre atractores delictivos e incidencia histórica.
+        </p>
       </div>
     </div>
   );
