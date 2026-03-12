@@ -57,7 +57,7 @@ export function ProjectList() {
       id,
       name: nombre,
       createdAt: Date.now(),
-      createdBy: String(user!.id),
+      createdBy: user!.username,
     });
     setShowPrompt(false);
     setNombreInput("");
