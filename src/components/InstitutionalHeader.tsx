@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
 
 export function InstitutionalHeader() {
   return (
@@ -16,12 +15,6 @@ export function InstitutionalHeader() {
             className="h-12 w-12 object-contain sm:h-14 sm:w-14"
             unoptimized
           />
-          <Link
-            href="/incidencia"
-            className="text-[10px] sm:text-xs font-medium text-sky-400 hover:text-sky-300 underline underline-offset-2"
-          >
-            Cargar incidencia
-          </Link>
         </div>
         <div className="flex flex-1 flex-col items-center justify-center text-center min-w-0">
           <h1 className="text-lg font-bold tracking-tight text-slate-100 sm:text-xl">

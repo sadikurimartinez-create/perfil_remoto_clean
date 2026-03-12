@@ -51,17 +51,22 @@ export function CaptureAndAddPhoto() {
   };
 
   const handleAgregarAlAlbum = async () => {
-    if (!previewUrl || !gps || !project) return;
+    if (!previewUrl || !gps || !project || !file) return;
 
-    // Estado en memoria (para el flujo actual)
-    addPhotoToAlbum({
-      previewUrl,
-      lat: gps.lat,
-      lng: gps.lng,
-      tipo,
-      comentario: comentario.trim(),
-      file: file ?? undefined,
-    });
+    const photoId = crypto.randomUUID();
+
+    // Estado en memoria (mismo id que Dexie)
+    addPhotoToAlbum(
+      {
+        previewUrl,
+        lat: gps.lat,
+        lng: gps.lng,
+        tipo,
+        comentario: comentario.trim(),
+        file,
+      },
+      photoId
+    );
 
     // Persistencia offline en IndexedDB (Dexie)
     try {
@@ -75,19 +80,16 @@ export function CaptureAndAddPhoto() {
             createdAt: Date.now(),
           });
         }
-
-        if (file) {
-          await db.photos.add({
-            id: crypto.randomUUID(),
-            projectId,
-            imageBlob: file,
-            tag: tipo,
-            comments: comentario.trim(),
-            lat: gps.lat,
-            lng: gps.lng,
-            timestamp: Date.now(),
-          });
-        }
+        await db.photos.add({
+          id: photoId,
+          projectId,
+          imageBlob: file,
+          tag: tipo,
+          comments: comentario.trim(),
+          lat: gps.lat,
+          lng: gps.lng,
+          timestamp: Date.now(),
+        });
       });
     } catch (e) {
       console.error(

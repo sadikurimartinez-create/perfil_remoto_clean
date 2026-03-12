@@ -49,12 +49,17 @@ export async function searchDenueAround(
 
   const response = await fetch(url);
   if (!response.ok) {
+    const text = await response.text().catch(() => "");
     console.error(
       "[denueInegi] Error al consultar DENUE",
       response.status,
-      await response.text()
+      text
     );
-    return null;
+    throw new Error(
+      `DENUE respondió HTTP ${response.status}${
+        text ? `: ${text.slice(0, 200)}` : ""
+      }`
+    );
   }
 
   const data = (await response.json()) as any[];

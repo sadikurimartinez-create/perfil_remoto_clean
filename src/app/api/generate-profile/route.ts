@@ -9,6 +9,7 @@ import { buildIrregularBusinesses } from "@/lib/environmentProfile";
 import { getStreetViewComparison } from "@/lib/googleStreetView";
 import { getPool } from "@/lib/db";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
+import { getNearbyCrimes } from "@/lib/crimeData";
 
 type PhotoInput = {
   id: string;
@@ -190,6 +191,7 @@ function buildPromptForGemini(params: {
   }>;
   irregularidadesTexto: string;
   incidencia: HistoricalSummary;
+  incidenciaArchivosTexto: string;
   streetViewUrl: string | null;
   strategySummary: string;
 }): string {
@@ -199,6 +201,7 @@ function buildPromptForGemini(params: {
     visionPorFoto,
     irregularidadesTexto,
     incidencia,
+    incidenciaArchivosTexto,
     streetViewUrl,
     strategySummary,
   } = params;
@@ -261,6 +264,9 @@ ${strategySummary || "No se especificó etiqueta del catálogo; aplicar análisi
 
 INCIDENCIA ESTADÍSTICA (PostGIS / CSV):
 ${incidenciaTexto}
+
+INCIDENCIA HISTÓRICA ADICIONAL (Archivos CSV locales):
+${incidenciaArchivosTexto || "No se encontraron delitos adicionales en los archivos CSV locales dentro del radio analizado."}
 
 CONTEXTO VISUAL HISTÓRICO (Street View):
 ${streetViewTexto}
@@ -349,6 +355,31 @@ export async function POST(req: Request) {
       bibliographyPromise,
     ]);
 
+    let incidenciaArchivosTexto = "";
+    try {
+      const nearbyCrimes = await getNearbyCrimes(
+        centerLat,
+        centerLng,
+        radiusMeters
+      );
+      incidenciaArchivosTexto =
+        nearbyCrimes.length === 0
+          ? "No se encontraron delitos en los archivos CSV locales dentro del radio analizado."
+          : nearbyCrimes
+              .slice(0, 50)
+              .map(
+                (c, idx) =>
+                  `${idx + 1}. ${c.tipo} en (${c.lat.toFixed(
+                    5
+                  )}, ${c.lng.toFixed(5)}) – archivo: ${c.fuente}`
+              )
+              .join("\n");
+    } catch (e) {
+      console.error("[generate-profile] Error al leer archivos de incidencia:", e);
+      incidenciaArchivosTexto =
+        "No fue posible leer los archivos CSV de incidencia local en este momento.";
+    }
+
     let irregularidadesTexto = "";
     try {
       const irregs = buildIrregularBusinesses(placesResult, denueResult);
@@ -407,6 +438,7 @@ export async function POST(req: Request) {
       visionPorFoto,
       irregularidadesTexto,
       incidencia: incidenciaResumen,
+      incidenciaArchivosTexto,
       streetViewUrl,
       strategySummary,
     });

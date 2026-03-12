@@ -1,5 +1,10 @@
 import Dexie, { Table } from "dexie";
 
+/**
+ * Base de datos local (IndexedDB vía Dexie) para Memoria y Gestión de Expedientes.
+ * projects: id, name, createdAt
+ * photos: id, projectId, imageBlob (Blob), tag, comments, lat, lng, timestamp
+ */
 export type ProjectRow = {
   id: string;
   name: string;

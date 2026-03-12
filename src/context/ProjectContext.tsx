@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode
 } from "react";
+import { db } from "@/lib/localDb";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -71,7 +72,9 @@ type ProjectContextValue = {
   analysisResult: AnalysisResult | null;
   createProject: (nombre: string) => void;
   closeProject: () => void;
-  addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">) => void;
+  loadProject: (projectId: string) => Promise<void>;
+  addPhotoToAlbum: (photo: Omit<AlbumPhoto, "id">, id?: string) => void;
+  removePhotoFromAlbum: (id: string) => void;
   updatePhotoMeta: (id: string, meta: { tipo: string; comentario: string }) => void;
   togglePhotoSelection: (id: string) => void;
   selectAllPhotos: () => void;
@@ -105,11 +108,35 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     setAnalysisResultState(null);
   }, []);
 
-  const addPhotoToAlbum = useCallback((photo: Omit<AlbumPhoto, "id">) => {
+  const loadProject = useCallback(async (projectId: string) => {
+    const projectRow = await db.projects.get(projectId);
+    if (!projectRow) return;
+    const photoRows = await db.photos.where("projectId").equals(projectId).toArray();
+    const albumPhotos: AlbumPhoto[] = photoRows.map((p) => ({
+      id: p.id,
+      previewUrl: URL.createObjectURL(p.imageBlob),
+      lat: p.lat,
+      lng: p.lng,
+      tipo: p.tag,
+      comentario: p.comments,
+      file: new File([p.imageBlob], "photo.jpg", { type: p.imageBlob.type }),
+    }));
+    setProject({ id: projectRow.id, nombre: projectRow.name });
+    setAlbum(albumPhotos);
+    setSelectedIds([]);
+    setAnalysisResultState(null);
+  }, []);
+
+  const addPhotoToAlbum = useCallback((photo: Omit<AlbumPhoto, "id">, id?: string) => {
     setAlbum((prev) => [
       ...prev,
-      { ...photo, id: generateId() }
+      { ...photo, id: id ?? generateId() }
     ]);
+  }, []);
+
+  const removePhotoFromAlbum = useCallback((id: string) => {
+    setAlbum((prev) => prev.filter((p) => p.id !== id));
+    setSelectedIds((prev) => prev.filter((x) => x !== id));
   }, []);
 
   const updatePhotoMeta = useCallback((id: string, meta: { tipo: string; comentario: string }) => {
@@ -145,7 +172,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       analysisResult,
       createProject,
       closeProject,
+      loadProject,
       addPhotoToAlbum,
+      removePhotoFromAlbum,
       updatePhotoMeta,
       togglePhotoSelection,
       selectAllPhotos,
@@ -159,7 +188,9 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       analysisResult,
       createProject,
       closeProject,
+      loadProject,
       addPhotoToAlbum,
+      removePhotoFromAlbum,
       updatePhotoMeta,
       togglePhotoSelection,
       selectAllPhotos,
