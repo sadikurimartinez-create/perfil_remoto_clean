@@ -17,6 +17,8 @@ export function ProjectList() {
   const router = useRouter();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
+   // TODO: sustituir por el usuario autenticado real
+  const currentUser = { id: "demo-user", role: "USER" as const };
 
   const projectsWithCount = useLiveQuery(
     async (): Promise<ProjectWithCount[]> => {
@@ -44,6 +46,7 @@ export function ProjectList() {
       id,
       name: nombre,
       createdAt: Date.now(),
+      createdBy: currentUser.id,
     });
     setShowPrompt(false);
     setNombreInput("");
@@ -106,43 +109,66 @@ export function ProjectList() {
             </div>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
-              {list.map((p) => (
-                <li
-                  key={p.id}
-                  className="card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-slate-800 hover:border-slate-700"
-                >
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-sm font-semibold text-slate-100 truncate">
-                      {p.name}
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {new Date(p.createdAt).toLocaleDateString("es-MX", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      {p.photoCount} {p.photoCount === 1 ? "foto" : "fotos"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleDeleteProject(p.id)}
-                      className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
-                    >
-                      Eliminar
-                    </button>
-                    <Link
-                      href={`/project/${p.id}`}
-                      className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
-                    >
-                      Abrir Proyecto
-                    </Link>
-                  </div>
-                </li>
-              ))}
+              {list.map((p) => {
+                const isLockedByOther =
+                  p.lockedBy && p.lockedBy !== currentUser.id;
+                return (
+                  <li
+                    key={p.id}
+                    className="card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-slate-800 hover:border-slate-700"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold text-slate-100 truncate">
+                        {p.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        {new Date(p.createdAt).toLocaleDateString("es-MX", {
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                        })}
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {p.photoCount} {p.photoCount === 1 ? "foto" : "fotos"}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Creado por:{" "}
+                        <span className="font-medium text-slate-300">
+                          {p.createdBy ?? "Desconocido"}
+                        </span>
+                      </p>
+                      {isLockedByOther && (
+                        <p className="text-[11px] text-red-400 mt-0.5">
+                          🔒 En uso por otro analista
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleDeleteProject(p.id)}
+                        className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
+                      >
+                        Eliminar
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isLockedByOther}
+                        onClick={() => {
+                          if (!isLockedByOther) router.push(`/project/${p.id}`);
+                        }}
+                        className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium ${
+                          isLockedByOther
+                            ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                            : "bg-sky-600 text-white hover:bg-sky-500"
+                        }`}
+                      >
+                        Abrir Proyecto
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>

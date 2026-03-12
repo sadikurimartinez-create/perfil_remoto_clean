@@ -1,14 +1,11 @@
 import Dexie, { Table } from "dexie";
 
-/**
- * Base de datos local (IndexedDB vía Dexie) para Memoria y Gestión de Expedientes.
- * projects: id, name, createdAt
- * photos: id, projectId, imageBlob (Blob), tag, comments, lat, lng, timestamp
- */
 export type ProjectRow = {
   id: string;
   name: string;
   createdAt: number;
+  createdBy?: string;
+  lockedBy?: string | null;
 };
 
 export type PhotoRow = {
@@ -27,12 +24,22 @@ export type AnalysisRow = {
   projectId: string;
   content: string;
   createdAt: number;
+  createdBy?: string;
+};
+
+export type UserRow = {
+  id?: number;
+  username: string;
+  passwordHash: string;
+  role: "ADMIN" | "USER";
+  name: string;
 };
 
 class LocalPerfiladorDB extends Dexie {
   projects!: Table<ProjectRow, string>;
   photos!: Table<PhotoRow, string>;
   analyses!: Table<AnalysisRow, number>;
+  users!: Table<UserRow, number>;
 
   constructor() {
     super("PerfiladorRemotoDB");
@@ -44,6 +51,12 @@ class LocalPerfiladorDB extends Dexie {
       projects: "id, name, createdAt",
       photos: "id, projectId, timestamp",
       analyses: "++id, projectId, createdAt",
+    });
+    this.version(3).stores({
+      projects: "id, name, createdAt, createdBy, lockedBy",
+      photos: "id, projectId, timestamp",
+      analyses: "++id, projectId, createdAt, createdBy",
+      users: "++id, username, role",
     });
   }
 }

@@ -17,6 +17,9 @@ export default function ProjectWorkspacePage() {
   const { project, loadProject, removePhotoFromAlbum, album } = useProject();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [lockedByOther, setLockedByOther] = useState<string | null>(null);
+  // TODO: sustituir por usuario autenticado real
+  const currentUser = { id: "demo-user", role: "USER" as const };
 
   const analyses = useLiveQuery(
     async (): Promise<AnalysisRow[]> => {
@@ -41,6 +44,16 @@ export default function ProjectWorkspacePage() {
           setNotFound(true);
           return;
         }
+        if (
+          row.lockedBy &&
+          row.lockedBy !== currentUser.id &&
+          currentUser.role !== "ADMIN"
+        ) {
+          setLockedByOther(row.lockedBy);
+          return;
+        }
+
+        await db.projects.update(projectId, { lockedBy: currentUser.id });
         await loadProject(projectId);
       } catch (e) {
         if (!cancelled) setNotFound(true);
@@ -67,6 +80,24 @@ export default function ProjectWorkspacePage() {
     return (
       <div className="flex items-center justify-center min-h-[200px] text-slate-400">
         Cargando expediente…
+      </div>
+    );
+  }
+
+  if (lockedByOther && !project) {
+    return (
+      <div className="card p-6 text-center space-y-3">
+        <p className="text-sm text-red-400 font-semibold">
+          Acceso denegado: este expediente está en uso por otro analista (ID:{" "}
+          {lockedByOther}).
+        </p>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="inline-flex items-center justify-center rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-600"
+        >
+          Volver al inicio
+        </button>
       </div>
     );
   }
@@ -108,7 +139,12 @@ export default function ProjectWorkspacePage() {
         </div>
         <button
           type="button"
-          onClick={() => router.push("/")}
+          onClick={async () => {
+            if (projectId) {
+              await db.projects.update(projectId, { lockedBy: null });
+            }
+            router.push("/");
+          }}
           className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
         >
           Guardar y Salir a Inicio
