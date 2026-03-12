@@ -12,7 +12,7 @@ export default function AdminPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [role, setRole] = useState<"ADMIN" | "USER">("USER");
+  const [showPassword, setShowPassword] = useState(false);
 
   if (!user || user.role !== "ADMIN") {
     return (
@@ -36,14 +36,13 @@ export default function AdminPage() {
     const row: Omit<UserRow, "id"> = {
       username: username.trim(),
       passwordHash: password,
-      role,
+      role: "USER",
       name: name.trim(),
     };
     await db.users.add(row);
     setUsername("");
     setPassword("");
     setName("");
-    setRole("USER");
   };
 
   const handleDeleteUser = async (id?: number) => {
@@ -76,9 +75,20 @@ export default function AdminPage() {
         className="card p-4 space-y-3 border border-slate-800"
       >
         <h3 className="text-sm font-semibold text-slate-100">
-          Crear nuevo usuario
+          Alta de analistas (rol USER)
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <label className="block text-[11px] text-slate-300 mb-1">
+              Nombre completo
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
+            />
+          </div>
           <div>
             <label className="block text-[11px] text-slate-300 mb-1">
               Usuario
@@ -94,43 +104,28 @@ export default function AdminPage() {
             <label className="block text-[11px] text-slate-300 mb-1">
               Contraseña
             </label>
-            <input
-              type="text"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-slate-300 mb-1">
-              Nombre
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] text-slate-300 mb-1">
-              Rol
-            </label>
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value as "ADMIN" | "USER")}
-              className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-100"
-            >
-              <option value="USER">USER</option>
-              <option value="ADMIN">ADMIN</option>
-            </select>
+            <div className="relative w-full">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 pr-9 text-xs text-slate-100"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 hover:text-white"
+              >
+                {showPassword ? "Ocultar" : "Ver"}
+              </button>
+            </div>
           </div>
         </div>
         <button
           type="submit"
           className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
         >
-          Guardar usuario
+          Registrar Analista
         </button>
       </form>
 

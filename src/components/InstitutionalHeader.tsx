@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { useAuth } from "@/context/AuthContext";
 
 export function InstitutionalHeader() {
+  const { user, logout } = useAuth();
+
   return (
     <header className="w-full border-b border-slate-800 bg-slate-950/95">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-3 px-4 py-3">
@@ -27,7 +30,16 @@ export function InstitutionalHeader() {
             Secretaría de Seguridad Pública del Estado de Aguascalientes
           </p>
         </div>
-        <div className="flex-shrink-0">
+        <div className="flex-shrink-0 flex items-center gap-3">
+          {user && (
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className="text-[11px] sm:text-xs font-medium text-slate-400 hover:text-red-400 transition-colors"
+            >
+              Cerrar sesión
+            </button>
+          )}
           <Image
             src="/logos/logo-ssp.png"
             alt="Secretaría de Seguridad Pública - Policía Estatal"
