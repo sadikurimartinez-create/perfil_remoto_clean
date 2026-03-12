@@ -44,11 +44,7 @@ export default function ProjectWorkspacePage() {
           setNotFound(true);
           return;
         }
-        if (
-          row.lockedBy &&
-          row.lockedBy !== currentUser.id &&
-          currentUser.role !== "ADMIN"
-        ) {
+        if (row.lockedBy && row.lockedBy !== currentUser.id) {
           setLockedByOther(row.lockedBy);
           return;
         }
