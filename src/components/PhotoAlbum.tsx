@@ -84,6 +84,9 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
   const [aiProfile, setAiProfile] = useState<string | null>(null);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [analysisContext, setAnalysisContext] = useState("");
+  const [analysisRadius, setAnalysisRadius] = useState(500);
 
   const handleGenerarAnalisis = async () => {
     if (selectedIds.length === 0) {
@@ -138,11 +141,38 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
     }
   };
 
-  const handleGenerateAIProfile = async () => {
+  const handleGenerateAIProfile = () => {
     if (selectedIds.length === 0) {
       setError("Seleccione al menos una fotografía.");
       return;
     }
+    setError(null);
+    setShowConfigModal(true);
+  };
+
+  const handleSaveAnalysis = async () => {
+    if (!aiProfile || !projectId) return;
+    setIsSavingAnalysis(true);
+    try {
+      await db.analyses.add({
+        projectId,
+        content: aiProfile,
+        createdAt: Date.now(),
+      });
+    } catch (err) {
+      console.error("[PhotoAlbum] Error al guardar análisis:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar el análisis en el expediente."
+      );
+    } finally {
+      setIsSavingAnalysis(false);
+    }
+  };
+
+  const confirmAndGenerateProfile = async () => {
+    setShowConfigModal(false);
     setError(null);
     setIsGeneratingAI(true);
     try {
@@ -172,7 +202,11 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
       const res = await fetch("/api/generate-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: photosPayload }),
+        body: JSON.stringify({
+          photos: photosPayload,
+          analysisContext,
+          analysisRadius,
+        }),
       });
 
       if (!res.ok) {
@@ -190,27 +224,6 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
       );
     } finally {
       setIsGeneratingAI(false);
-    }
-  };
-
-  const handleSaveAnalysis = async () => {
-    if (!aiProfile || !projectId) return;
-    setIsSavingAnalysis(true);
-    try {
-      await db.analyses.add({
-        projectId,
-        content: aiProfile,
-        createdAt: Date.now(),
-      });
-    } catch (err) {
-      console.error("[PhotoAlbum] Error al guardar análisis:", err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo guardar el análisis en el expediente."
-      );
-    } finally {
-      setIsSavingAnalysis(false);
     }
   };
 
@@ -402,6 +415,66 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
           )}
           <div className="prose prose-invert max-w-none text-sm bg-slate-950/60 rounded-lg border border-slate-700 px-4 py-3 whitespace-pre-wrap">
             {aiProfile}
+          </div>
+        </div>
+      )}
+
+      {showConfigModal && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/80">
+          <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 px-5 py-6 space-y-4">
+            <h3 className="text-lg font-semibold text-slate-100">
+              Configuración del Análisis Táctico
+            </h3>
+            {selectedIds.length >= 2 && (
+              <div className="space-y-1">
+                <label className="block text-xs font-medium text-slate-300">
+                  Hipótesis del investigador (contexto del cruce de ubicaciones)
+                </label>
+                <textarea
+                  value={analysisContext}
+                  onChange={(e) => setAnalysisContext(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-3 py-2 text-sm resize-none"
+                  placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-slate-300">
+                Radio de búsqueda geoespacial
+              </label>
+              <input
+                type="range"
+                min={100}
+                max={2000}
+                step={100}
+                value={analysisRadius}
+                onChange={(e) => setAnalysisRadius(Number(e.target.value))}
+                className="w-full accent-sky-500"
+              />
+              <p className="text-xs text-slate-400">
+                Radio de búsqueda:{" "}
+                <span className="font-semibold text-slate-100">
+                  {analysisRadius} metros
+                </span>
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowConfigModal(false)}
+                className="rounded-md border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmAndGenerateProfile()}
+                className="rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500"
+              >
+                Comenzar Análisis
+              </button>
+            </div>
           </div>
         </div>
       )}

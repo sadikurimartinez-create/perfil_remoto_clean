@@ -23,6 +23,8 @@ type PhotoInput = {
 
 type GenerateProfileBody = {
   photos: PhotoInput[];
+  analysisContext?: string;
+  analysisRadius?: number;
 };
 
 type GeocodingResult = {
@@ -195,6 +197,8 @@ function buildPromptForGemini(params: {
   incidenciaArchivosTexto: string;
   streetViewUrl: string | null;
   strategySummary: string;
+  analysisContext?: string;
+  analysisRadius: number;
 }): string {
   const {
     photos,
@@ -205,6 +209,8 @@ function buildPromptForGemini(params: {
     incidenciaArchivosTexto,
     streetViewUrl,
     strategySummary,
+    analysisContext,
+    analysisRadius,
   } = params;
 
   const comentariosInvestigador = photos
@@ -300,7 +306,10 @@ export async function POST(req: Request) {
       photos.reduce((acc, p) => acc + p.lat, 0) / photos.length;
     const centerLng =
       photos.reduce((acc, p) => acc + p.lng, 0) / photos.length;
-    const radiusMeters = 500;
+    const radiusMeters =
+      typeof body.analysisRadius === "number" && body.analysisRadius > 0
+        ? body.analysisRadius
+        : 500;
 
     const geocodingPromise = reverseGeocode(centerLat, centerLng);
   const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
@@ -493,6 +502,8 @@ export async function POST(req: Request) {
       incidenciaArchivosTexto,
       streetViewUrl,
       strategySummary,
+      analysisContext: body.analysisContext,
+      analysisRadius: radiusMeters,
     });
 
     const model = getGeminiModel(bibliographyContext);
