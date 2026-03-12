@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import exifr from "exifr";
 import { useProject } from "@/context/ProjectContext";
 import { TIPOS_IMAGEN } from "@/context/ProjectContext";
@@ -15,6 +15,8 @@ export function CaptureAndAddPhoto() {
   const [comentario, setComentario] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isReading, setIsReading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -106,6 +108,98 @@ export function CaptureAndAddPhoto() {
     setError(null);
   };
 
+  const handleGalleryUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!project || files.length === 0) return;
+
+    setError(null);
+
+    for (const selected of files) {
+      try {
+        let lat: number | null = null;
+        let lng: number | null = null;
+
+        const exifGps = await exifr.gps(selected).catch(() => null);
+        if (
+          exifGps &&
+          typeof exifGps.latitude === "number" &&
+          typeof exifGps.longitude === "number"
+        ) {
+          lat = exifGps.latitude;
+          lng = exifGps.longitude;
+        } else {
+          const fullExif = (await exifr
+            .parse(selected, { gps: true })
+            .catch(() => null)) as Record<string, unknown> | null;
+          if (fullExif?.latitude != null && fullExif?.longitude != null) {
+            lat = fullExif.latitude as number;
+            lng = fullExif.longitude as number;
+          }
+        }
+
+        if (lat == null || lng == null) {
+          console.warn(
+            "[CaptureAndAddPhoto] Imagen de galería sin coordenadas GPS, se omite."
+          );
+          continue;
+        }
+
+        const photoId = crypto.randomUUID();
+        const projectId = project.id;
+        const preview = URL.createObjectURL(selected);
+
+        addPhotoToAlbum(
+          {
+            previewUrl: preview,
+            lat,
+            lng,
+            tipo,
+            comentario: comentario.trim(),
+            file: selected,
+          },
+          photoId
+        );
+
+        try {
+          await db.transaction("rw", db.projects, db.photos, async () => {
+            const existing = await db.projects.get(projectId);
+            if (!existing) {
+              await db.projects.add({
+                id: projectId,
+                name: project.nombre,
+                createdAt: Date.now(),
+              });
+            }
+            await db.photos.add({
+              id: photoId,
+              projectId,
+              imageBlob: selected,
+              tag: tipo,
+              comments: comentario.trim(),
+              lat,
+              lng,
+              timestamp: Date.now(),
+            });
+          });
+        } catch (err) {
+          console.error(
+            "[CaptureAndAddPhoto] Error guardando imagen de galería en IndexedDB:",
+            err
+          );
+        }
+      } catch (err) {
+        console.error(
+          "[CaptureAndAddPhoto] Error procesando imagen de galería:",
+          err
+        );
+      }
+    }
+
+    e.target.value = "";
+  };
+
   return (
     <section className="card p-4 md:p-6 space-y-4">
       <header className="space-y-1">
@@ -123,6 +217,7 @@ export function CaptureAndAddPhoto() {
           <span className="text-xs text-slate-500">JPG, JPEG, HEIC. Con GPS activado.</span>
         </div>
         <input
+          ref={fileInputRef}
           type="file"
           accept="image/*"
           capture="environment"
@@ -130,6 +225,23 @@ export function CaptureAndAddPhoto() {
           onChange={handleFileChange}
         />
       </label>
+
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleGalleryUpload}
+      />
+
+      <button
+        type="button"
+        onClick={() => galleryInputRef.current?.click()}
+        className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800"
+      >
+        Subir desde galería
+      </button>
 
       {isReading && (
         <p className="text-sm text-sky-400">Leyendo metadatos EXIF…</p>
