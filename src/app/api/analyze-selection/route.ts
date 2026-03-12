@@ -64,22 +64,32 @@ export async function POST(req: Request) {
     ]);
 
     // Incidencia histórica en el radio alrededor del clúster de fotos
-    const { rows: delitosCercanos } = await getPool().query(
-      `
-      SELECT
-        incidente,
-        rango_horario,
-        ST_Y(geometria::geometry) AS lat,
-        ST_X(geometria::geometry) AS lng
-      FROM incidencia_estadistica
-      WHERE ST_DWithin(
-        geometria,
-        ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-        $3
-      )
-    `,
-      [centerLng, centerLat, radiusMeters]
-    );
+    let delitosCercanos: any[] = [];
+    try {
+      const { rows } = await getPool().query(
+        `
+        SELECT
+          incidente,
+          rango_horario,
+          ST_Y(geometria::geometry) AS lat,
+          ST_X(geometria::geometry) AS lng
+        FROM incidencia_estadistica
+        WHERE ST_DWithin(
+          geometria,
+          ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
+          $3
+        )
+      `,
+        [centerLng, centerLat, radiusMeters]
+      );
+      delitosCercanos = rows;
+    } catch (err) {
+      console.error(
+        "[api/analyze-selection] Error en consulta histórica (se continúa sin capa de incidencia):",
+        err
+      );
+      delitosCercanos = [];
+    }
 
     const resumenPorDelito = new Map<string, number>();
     const resumenPorRango = new Map<string, number>();
