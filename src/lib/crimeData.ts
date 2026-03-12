@@ -41,7 +41,7 @@ export async function getNearbyCrimes(
 ): Promise<NearbyCrime[]> {
   const baseDir = path.join(process.cwd(), "incidencia_delictiva");
 
-  let entries: fs.Dirent[];
+  let entries: any[];
   try {
     entries = await fs.readdir(baseDir, { withFileTypes: true });
   } catch {
