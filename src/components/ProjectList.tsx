@@ -50,6 +50,23 @@ export function ProjectList() {
     router.push(`/project/${id}`);
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    const isConfirmed = window.confirm(
+      "¿Estás seguro de eliminar este expediente y TODA su evidencia? Esta acción no se puede deshacer."
+    );
+    if (!isConfirmed) return;
+
+    try {
+      await db.transaction("rw", db.projects, db.photos, db.analyses, async () => {
+        await db.photos.where("projectId").equals(projectId).delete();
+        await db.analyses.where("projectId").equals(projectId).delete();
+        await db.projects.delete(projectId);
+      });
+    } catch (err) {
+      console.error("[ProjectList] Error al eliminar expediente:", err);
+    }
+  };
+
   const list = projectsWithCount ?? [];
 
   return (
@@ -109,12 +126,21 @@ export function ProjectList() {
                       {p.photoCount} {p.photoCount === 1 ? "foto" : "fotos"}
                     </p>
                   </div>
-                  <Link
-                    href={`/project/${p.id}`}
-                    className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
-                  >
-                    Abrir Proyecto
-                  </Link>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleDeleteProject(p.id)}
+                      className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
+                    >
+                      Eliminar
+                    </button>
+                    <Link
+                      href={`/project/${p.id}`}
+                      className="inline-flex items-center justify-center rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500"
+                    >
+                      Abrir Proyecto
+                    </Link>
+                  </div>
                 </li>
               ))}
             </ul>
