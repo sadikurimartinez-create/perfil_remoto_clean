@@ -11,13 +11,15 @@ type ProjectWithCount = {
   name: string;
   createdAt: number;
   photoCount: number;
+  createdBy?: string;
+  lockedBy?: string | null;
 };
 
 export function ProjectList() {
   const router = useRouter();
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
-   // TODO: sustituir por el usuario autenticado real
+  // TODO: sustituir por el usuario autenticado real
   const currentUser = { id: "demo-user", role: "USER" as const };
 
   const projectsWithCount = useLiveQuery(
