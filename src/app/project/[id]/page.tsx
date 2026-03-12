@@ -44,6 +44,7 @@ export default function ProjectWorkspacePage() {
           setNotFound(true);
           return;
         }
+
         if (row.lockedBy && row.lockedBy !== currentUser.id) {
           setLockedByOther(row.lockedBy);
           return;
@@ -60,7 +61,7 @@ export default function ProjectWorkspacePage() {
     return () => {
       cancelled = true;
     };
-  }, [projectId, loadProject]);
+  }, [projectId, loadProject, currentUser.id]);
 
   const handleDeletePhoto = async (id: string) => {
     if (!confirm("¿Eliminar esta fotografía del expediente?")) return;
