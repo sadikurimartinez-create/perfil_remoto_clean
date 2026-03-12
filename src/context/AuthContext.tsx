@@ -55,6 +55,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     setLoading(true);
     try {
+      // Fallback local para el piloto (sin depender de PostgreSQL)
+      if (username === "admin" && password === "Admin2026!") {
+        const data: AuthUser = {
+          id: 1,
+          username: "admin",
+          role: "ADMIN",
+          name: "Administrador General",
+        };
+        window.localStorage.setItem(
+          "perfilador.currentUser",
+          JSON.stringify(data)
+        );
+        setUser(data);
+        router.push("/");
+        return;
+      }
+      if (username === "analista1" && password === "Analista2026!") {
+        const data: AuthUser = {
+          id: 2,
+          username: "analista1",
+          role: "USER",
+          name: "Analista 1",
+        };
+        window.localStorage.setItem(
+          "perfilador.currentUser",
+          JSON.stringify(data)
+        );
+        setUser(data);
+        router.push("/");
+        return;
+      }
+
+      // Si en el futuro configuramos un backend real, se puede reactivar:
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

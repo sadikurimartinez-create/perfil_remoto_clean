@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useLiveQuery } from "dexie-react-hooks";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
 import { db, type AnalysisRow } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
+import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -21,17 +22,7 @@ export default function ProjectWorkspacePage() {
   const [lockedByOther, setLockedByOther] = useState<string | null>(null);
   const { user, loading: loadingAuth } = useAuth();
 
-  const analyses = useLiveQuery(
-    async (): Promise<AnalysisRow[]> => {
-      if (!projectId) return [];
-      return db.analyses
-        .where("projectId")
-        .equals(projectId)
-        .reverse()
-        .sortBy("createdAt");
-    },
-    [projectId]
-  );
+  const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -44,24 +35,47 @@ export default function ProjectWorkspacePage() {
     let cancelled = false;
     (async () => {
       try {
-        const row = await db.projects.get(projectId);
+        const firestore = getDb();
+        const ref = doc(firestore, "projects", projectId);
+        const snap = await getDoc(ref);
         if (cancelled) return;
-        if (!row) {
+        if (!snap.exists()) {
           setNotFound(true);
           return;
         }
 
+        const data = snap.data() as any;
         if (
-          row.lockedBy &&
-          row.lockedBy !== String(user.id) &&
+          data.lockedBy &&
+          data.lockedBy !== String(user.id) &&
           user.role !== "ADMIN"
         ) {
-          setLockedByOther(row.lockedBy);
+          setLockedByOther(data.lockedBy);
+          router.push("/");
           return;
         }
 
-        await db.projects.update(projectId, { lockedBy: String(user.id) });
+        await updateDoc(ref, { lockedBy: String(user.id) });
         await loadProject(projectId);
+
+        // suscripción para expulsar si otro toma el lock
+        const unsub = onSnapshot(ref, (s) => {
+          const d = s.data() as any;
+          if (
+            d?.lockedBy &&
+            d.lockedBy !== String(user.id) &&
+            user.role !== "ADMIN"
+          ) {
+            setLockedByOther(d.lockedBy);
+            router.push("/");
+          }
+        });
+        if (!cancelled) {
+          // guardar para limpiar al desmontar
+          (window as any).__perfilador_unsub_lock = unsub;
+        } else {
+          unsub();
+        }
       } catch (e) {
         if (!cancelled) setNotFound(true);
       } finally {
@@ -70,6 +84,11 @@ export default function ProjectWorkspacePage() {
     })();
     return () => {
       cancelled = true;
+      const maybeUnsub = (window as any).__perfilador_unsub_lock;
+      if (typeof maybeUnsub === "function") {
+        maybeUnsub();
+        (window as any).__perfilador_unsub_lock = undefined;
+      }
     };
   }, [projectId, loadProject, user, loadingAuth, router]);
 
@@ -148,7 +167,9 @@ export default function ProjectWorkspacePage() {
           type="button"
           onClick={async () => {
             if (projectId) {
-              await db.projects.update(projectId, { lockedBy: null });
+              const firestore = getDb();
+              const ref = doc(firestore, "projects", projectId);
+              await updateDoc(ref, { lockedBy: null });
             }
             router.push("/");
           }}

@@ -3,9 +3,16 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "@/lib/localDb";
 import { useAuth } from "@/context/AuthContext";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  updateDoc,
+} from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 type ProjectWithCount = {
   id: string;
@@ -21,6 +28,7 @@ export function ProjectList() {
   const [nombreInput, setNombreInput] = useState("");
   const [showPrompt, setShowPrompt] = useState(false);
   const { user, loading } = useAuth();
+  const [projects, setProjects] = useState<ProjectWithCount[]>([]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -28,21 +36,26 @@ export function ProjectList() {
     }
   }, [loading, user, router]);
 
-  const projectsWithCount = useLiveQuery(
-    async (): Promise<ProjectWithCount[]> => {
-      const projects = await db.projects
-        .orderBy("createdAt")
-        .reverse()
-        .toArray();
-      return Promise.all(
-        projects.map(async (p) => ({
-          ...p,
-          photoCount: await db.photos.where("projectId").equals(p.id).count(),
-        }))
-      );
-    },
-    []
-  );
+  useEffect(() => {
+    if (loading || !user) return;
+    const db = getDb();
+    const q = query(collection(db, "projects"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const list: ProjectWithCount[] = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          name: data.name ?? "Sin nombre",
+          createdAt: data.createdAt ?? 0,
+          photoCount: data.photoCount ?? 0,
+          createdBy: data.createdBy,
+          lockedBy: data.lockedBy ?? null,
+        };
+      });
+      setProjects(list);
+    });
+    return () => unsub();
+  }, [loading, user]);
 
   const handleNuevoProyecto = () => {
     setNombreInput("");
@@ -51,17 +64,23 @@ export function ProjectList() {
 
   const handleConfirmarNombre = async () => {
     const nombre = nombreInput.trim();
-    if (!nombre) return;
-    const id = crypto.randomUUID();
-    await db.projects.add({
-      id,
-      name: nombre,
-      createdAt: Date.now(),
-      createdBy: user!.username,
-    });
+    if (!nombre || !user) return;
+    const db = getDb();
+    const col = collection(db, "projects");
+    const createdAt = Date.now();
+    // Firestore generará el id, luego navegamos a ese proyecto
+    const ref = await import("firebase/firestore").then(({ addDoc }) =>
+      addDoc(col, {
+        name: nombre,
+        createdAt,
+        createdBy: user.username,
+        lockedBy: null,
+        photoCount: 0,
+      })
+    );
     setShowPrompt(false);
     setNombreInput("");
-    router.push(`/project/${id}`);
+    router.push(`/project/${ref.id}`);
   };
 
   const handleDeleteProject = async (projectId: string) => {
@@ -71,17 +90,17 @@ export function ProjectList() {
     if (!isConfirmed) return;
 
     try {
-      await db.transaction("rw", db.projects, db.photos, db.analyses, async () => {
-        await db.photos.where("projectId").equals(projectId).delete();
-        await db.analyses.where("projectId").equals(projectId).delete();
-        await db.projects.delete(projectId);
-      });
+      const db = getDb();
+      // borramos solo el documento del proyecto; las fotos/subcolecciones
+      // se manejarán en otra migración si hace falta
+      const ref = doc(db, "projects", projectId);
+      await updateDoc(ref, { deleted: true });
     } catch (err) {
-      console.error("[ProjectList] Error al eliminar expediente:", err);
+      console.error("[ProjectList] Error al marcar expediente como eliminado:", err);
     }
   };
 
-  const list = projectsWithCount ?? [];
+  const list = projects ?? [];
 
   if (loading) {
     return (
