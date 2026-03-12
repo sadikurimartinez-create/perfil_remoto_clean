@@ -22,15 +22,28 @@ export type PhotoRow = {
   timestamp: number;
 };
 
+export type AnalysisRow = {
+  id?: number;
+  projectId: string;
+  content: string;
+  createdAt: number;
+};
+
 class LocalPerfiladorDB extends Dexie {
   projects!: Table<ProjectRow, string>;
   photos!: Table<PhotoRow, string>;
+  analyses!: Table<AnalysisRow, number>;
 
   constructor() {
     super("PerfiladorRemotoDB");
     this.version(1).stores({
       projects: "id, name, createdAt",
       photos: "id, projectId, timestamp",
+    });
+    this.version(2).stores({
+      projects: "id, name, createdAt",
+      photos: "id, projectId, timestamp",
+      analyses: "++id, projectId, createdAt",
     });
   }
 }

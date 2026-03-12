@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
+import { db } from "@/lib/localDb";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -64,9 +66,10 @@ function readFileAsBase64(file: File): Promise<string> {
 
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
+  projectId?: string;
 };
 
-export function PhotoAlbum({ onDeletePhoto }: PhotoAlbumProps = {}) {
+export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
   const {
     album,
     selectedIds,
@@ -78,6 +81,9 @@ export function PhotoAlbum({ onDeletePhoto }: PhotoAlbumProps = {}) {
   } = useProject();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiProfile, setAiProfile] = useState<string | null>(null);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
 
   const handleGenerarAnalisis = async () => {
     if (selectedIds.length === 0) {
@@ -122,12 +128,113 @@ export function PhotoAlbum({ onDeletePhoto }: PhotoAlbumProps = {}) {
       }
       const data = await res.json();
       setAnalysisResult(data);
+      setAiProfile(null);
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : "Error al analizar la selección.");
       setAnalysisResult(null);
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleGenerateAIProfile = async () => {
+    if (selectedIds.length === 0) {
+      setError("Seleccione al menos una fotografía.");
+      return;
+    }
+    setError(null);
+    setIsGeneratingAI(true);
+    try {
+      const selected = album.filter((p) => selectedIds.includes(p.id));
+      const photosPayload = await Promise.all(
+        selected.map(async (p) => {
+          let imageBase64: string | null = null;
+          if (p.file) {
+            try {
+              imageBase64 = await resizeImageToBase64(p.file, 640, 0.5);
+            } catch {
+              const sizeMb = p.file.size / (1024 * 1024);
+              if (sizeMb <= 2) imageBase64 = await readFileAsBase64(p.file);
+            }
+          }
+          return {
+            id: p.id,
+            lat: p.lat,
+            lng: p.lng,
+            tipo: p.tipo,
+            comentario: p.comentario,
+            imageBase64: imageBase64 ?? undefined,
+          };
+        })
+      );
+
+      const res = await fetch("/api/generate-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos: photosPayload }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || "Error al generar el perfil de IA");
+      }
+      const data = (await res.json()) as { markdown: string };
+      setAiProfile(data.markdown ?? "");
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Error al generar el perfil criminológico con IA."
+      );
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handleSaveAnalysis = async () => {
+    if (!aiProfile || !projectId) return;
+    setIsSavingAnalysis(true);
+    try {
+      await db.analyses.add({
+        projectId,
+        content: aiProfile,
+        createdAt: Date.now(),
+      });
+    } catch (err) {
+      console.error("[PhotoAlbum] Error al guardar análisis:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar el análisis en el expediente."
+      );
+    } finally {
+      setIsSavingAnalysis(false);
+    }
+  };
+
+  const handleDownloadMap = async () => {
+    const el = document.getElementById("map-export-container");
+    if (!el) return;
+    try {
+      const canvas = await html2canvas(el, {
+        useCORS: true,
+        allowTaint: true,
+        scale: 2,
+      });
+      const dataUrl = canvas.toDataURL("image/png");
+      const link = document.createElement("a");
+      link.href = dataUrl;
+      link.download = "Mapa_Dictamen_Tactico.png";
+      link.click();
+    } catch (err) {
+      console.error("[PhotoAlbum] Error al exportar mapa:", err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo exportar el mapa oficial."
+      );
     }
   };
 
@@ -215,7 +322,7 @@ export function PhotoAlbum({ onDeletePhoto }: PhotoAlbumProps = {}) {
         ))}
       </div>
 
-      <div className="pt-2 border-t border-slate-800">
+      <div className="pt-2 border-t border-slate-800 space-y-2">
         <button
           type="button"
           onClick={handleGenerarAnalisis}
@@ -223,6 +330,14 @@ export function PhotoAlbum({ onDeletePhoto }: PhotoAlbumProps = {}) {
           className="btn-primary w-full"
         >
           {isAnalyzing ? "Generando análisis…" : "Generar Análisis de Selección"}
+        </button>
+        <button
+          type="button"
+          onClick={handleGenerateAIProfile}
+          disabled={isGeneratingAI || selectedIds.length === 0}
+          className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+        >
+          {isGeneratingAI ? "Generando Perfil IA Completo…" : "Generar Perfil Criminológico (IA Completa)"}
         </button>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
@@ -240,10 +355,54 @@ export function PhotoAlbum({ onDeletePhoto }: PhotoAlbumProps = {}) {
               {analysisResult.unifiedProfile}
             </div>
           )}
-          <AnalysisMap
-            album={album.filter((p) => selectedIds.includes(p.id))}
-            analysisResult={analysisResult}
-          />
+          <div
+            id="map-export-container"
+            className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300">
+              <img src="/ssp-logo.png" alt="SSP" className="h-16 w-auto" />
+              <h2 className="text-xl font-bold text-center uppercase tracking-widest">
+                Perfil Criminológico Ambiental
+              </h2>
+              <img src="/ceipol-logo.png" alt="CEIPOL" className="h-16 w-auto" />
+            </div>
+            <div className="p-2">
+              <AnalysisMap
+                album={album.filter((p) => selectedIds.includes(p.id))}
+                analysisResult={analysisResult}
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadMap}
+            className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors"
+          >
+            Descargar Mapa Oficial
+          </button>
+        </div>
+      )}
+
+      {aiProfile && (
+        <div className="space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4">
+          <h4 className="text-base font-bold text-indigo-200">
+            Perfil criminológico ambiental (IA completa)
+          </h4>
+          {projectId && (
+            <button
+              type="button"
+              onClick={handleSaveAnalysis}
+              disabled={isSavingAnalysis}
+              className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSavingAnalysis
+                ? "Guardando análisis en expediente…"
+                : "Guardar Análisis en Expediente"}
+            </button>
+          )}
+          <div className="prose prose-invert max-w-none text-sm bg-slate-950/60 rounded-lg border border-slate-700 px-4 py-3 whitespace-pre-wrap">
+            {aiProfile}
+          </div>
         </div>
       )}
     </section>

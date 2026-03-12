@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { GoogleMap, HeatmapLayer, Marker, useJsApiLoader } from "@react-google-maps/api";
+import { Circle, GoogleMap, HeatmapLayer, Marker, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 type AnalysisMapProps = {
@@ -78,13 +78,57 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           streetViewControl: false,
           mapTypeControl: false,
           fullscreenControl: false,
+          mapTypeId: "hybrid",
         }}
       >
+        <Circle
+          center={center}
+          radius={500}
+          options={{
+            strokeColor: "#ef4444",
+            strokeOpacity: 0.9,
+            strokeWeight: 2,
+            fillColor: "#ef4444",
+            fillOpacity: 0.1,
+          }}
+        />
+
         {album.map((p) => (
           <Marker
             key={p.id}
             position={{ lat: p.lat, lng: p.lng }}
             title={`${p.tipo} - ${p.comentario ?? ""}`}
+          />
+        ))}
+
+        {album.length > 0 && (
+          <Marker
+            position={center}
+            title="Centro del levantamiento fotográfico"
+            icon={{
+              path: google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
+              scale: 8,
+              fillColor: "#f97316",
+              fillOpacity: 1,
+              strokeColor: "#1f2937",
+              strokeWeight: 2,
+            }}
+          />
+        )}
+
+        {analysisResult?.historicalCrimes?.map((c, idx) => (
+          <Marker
+            key={`crime-${idx}`}
+            position={{ lat: c.lat, lng: c.lng }}
+            title={c.tipoDelito}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 4,
+              fillColor: "#991b1b",
+              fillOpacity: 1,
+              strokeColor: "#fecaca",
+              strokeWeight: 1,
+            }}
           />
         ))}
 

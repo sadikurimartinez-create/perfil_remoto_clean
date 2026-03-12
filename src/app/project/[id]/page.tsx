@@ -2,18 +2,33 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useLiveQuery } from "dexie-react-hooks";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
-import { db } from "@/lib/localDb";
+import { db, type AnalysisRow } from "@/lib/localDb";
+import { exportToWord } from "@/lib/exportToWord";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
+  const router = useRouter();
   const projectId = typeof params.id === "string" ? params.id : null;
   const { project, loadProject, removePhotoFromAlbum, album } = useProject();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  const analyses = useLiveQuery(
+    async (): Promise<AnalysisRow[]> => {
+      if (!projectId) return [];
+      return db.analyses
+        .where("projectId")
+        .equals(projectId)
+        .reverse()
+        .sortBy("createdAt");
+    },
+    [projectId]
+  );
 
   useEffect(() => {
     if (!projectId) return;
@@ -91,10 +106,69 @@ export default function ProjectWorkspacePage() {
             Espacio de trabajo · Agregue o elimine fotos y genere el análisis.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => router.push("/")}
+          className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
+        >
+          Guardar y Salir a Inicio
+        </button>
       </div>
 
       <CaptureAndAddPhoto />
-      <PhotoAlbum onDeletePhoto={handleDeletePhoto} />
+      <PhotoAlbum onDeletePhoto={handleDeletePhoto} projectId={project.id} />
+
+      {analyses && analyses.length > 0 && (
+        <section className="card p-4 md:p-6 space-y-3 mt-2">
+          <h3 className="text-sm font-semibold text-slate-100">
+            Análisis guardados en este expediente
+          </h3>
+          <ul className="space-y-2">
+            {analyses.map((a) => (
+              <li
+                key={a.id}
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2"
+              >
+                <div className="text-xs text-slate-300">
+                  <p className="font-medium">
+                    Dictamen del{" "}
+                    {new Date(a.createdAt).toLocaleString("es-MX", {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      exportToWord(
+                        a.content,
+                        project.nombre || "Expediente_sin_nombre"
+                      )
+                    }
+                    className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+                  >
+                    Exportar a Word
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      await db.analyses.delete(a.id!);
+                    }}
+                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
+                  >
+                    Borrar
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }

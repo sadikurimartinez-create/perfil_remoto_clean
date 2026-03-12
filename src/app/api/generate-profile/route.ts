@@ -10,6 +10,7 @@ import { getStreetViewComparison } from "@/lib/googleStreetView";
 import { getPool } from "@/lib/db";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
+import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
 
 type PhotoInput = {
   id: string;
@@ -302,24 +303,30 @@ export async function POST(req: Request) {
     const radiusMeters = 500;
 
     const geocodingPromise = reverseGeocode(centerLat, centerLng);
-
-    const placesPromise = searchPlacesAround(
-      centerLat,
-      centerLng,
-      radiusMeters
-    ).catch((e) => {
-      console.error("[generate-profile] Places error:", e);
-      return null;
+  const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T> =>
+    new Promise((resolve, reject) => {
+      const id = setTimeout(
+        () => reject(new Error(`Timeout ${ms}ms en DENUE`)),
+        ms
+      );
+      p.then(
+        (v) => {
+          clearTimeout(id);
+          resolve(v);
+        },
+        (e) => {
+          clearTimeout(id);
+          reject(e);
+        }
+      );
     });
 
-    const denuePromise = searchDenueAround(
-      centerLat,
-      centerLng,
-      radiusMeters
-    ).catch((e) => {
-      console.error("[generate-profile] DENUE error:", e);
-      return null;
-    });
+  const placesPromise = searchPlacesAround(centerLat, centerLng, radiusMeters);
+
+  const denueTimedPromise = withTimeout(
+    searchDenueAround(centerLat, centerLng, radiusMeters),
+    4000
+  );
 
     const streetViewPromise = (async () => {
       try {
@@ -341,19 +348,26 @@ export async function POST(req: Request) {
 
     const [
       geocoding,
-      placesResult,
-      denueResult,
+      placesAndDenueSettled,
       streetViewUrl,
       { resumen: incidenciaResumen },
       bibliographyContext,
     ] = await Promise.all([
       geocodingPromise,
-      placesPromise,
-      denuePromise,
+      Promise.allSettled([denueTimedPromise, placesPromise]),
       streetViewPromise,
       historialPromise,
       bibliographyPromise,
     ]);
+
+    const denueResult =
+      placesAndDenueSettled[0].status === "fulfilled"
+        ? placesAndDenueSettled[0].value
+        : null;
+    const placesResult =
+      placesAndDenueSettled[1].status === "fulfilled"
+        ? placesAndDenueSettled[1].value
+        : null;
 
     let incidenciaArchivosTexto = "";
     try {
@@ -392,6 +406,44 @@ export async function POST(req: Request) {
                 `${idx + 1}. ${c.lugarGoogle.nombre} – ${c.lugarGoogle.direccion}. Motivo: ${c.motivo}`
             )
             .join("\n");
+      }
+      const denuePois: PointOfInterest[] =
+        denueResult?.unidades.map((u) => ({
+          name: u.nombre,
+          category: u.actividad ?? "desconocido",
+          lat: u.lat,
+          lng: u.lng,
+          source: "DENUE",
+        })) ?? [];
+      const placesPois: PointOfInterest[] = placesResult
+        ? [
+            ...placesResult.escuelas,
+            ...placesResult.expendiosAlcohol,
+            ...placesResult.chatarrerasOTalleres,
+            ...placesResult.otros,
+          ].map((p) => ({
+            name: p.nombre,
+            category: p.categoria,
+            lat: p.lat,
+            lng: p.lng,
+            source: "GOOGLE" as const,
+          }))
+        : [];
+      const mergedPois = mergeAndDeduplicatePOIs(denuePois, placesPois);
+      if (mergedPois.length > 0) {
+        const resumenPOI = mergedPois
+          .slice(0, 50)
+          .map(
+            (p, idx) =>
+              `${idx + 1}. ${p.name} (${p.category}) en (${p.lat.toFixed(
+                5
+              )}, ${p.lng.toFixed(5)}) – fuente: ${p.source}`
+          )
+          .join("\n");
+        irregularidadesTexto +=
+          (irregularidadesTexto ? "\n\n" : "") +
+          "Puntos de interés fusionados (DENUE + Google Places):\n" +
+          resumenPOI;
       }
     } catch (e) {
       console.error(
