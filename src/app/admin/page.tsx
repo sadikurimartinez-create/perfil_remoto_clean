@@ -1,14 +1,11 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, type UserRow } from "@/lib/localDb";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
 
 export default function AdminPage() {
   const { user } = useAuth();
-  const users = useLiveQuery(async () => db.users.toArray(), []);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -33,22 +30,18 @@ export default function AdminPage() {
   const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim() || !name.trim()) return;
-    const row: Omit<UserRow, "id"> = {
-      username: username.trim(),
-      passwordHash: password,
-      role: "USER",
-      name: name.trim(),
-    };
-    await db.users.add(row);
+    await fetch("/api/admin/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: username.trim(),
+        password: password,
+        name: name.trim(),
+      }),
+    });
     setUsername("");
     setPassword("");
     setName("");
-  };
-
-  const handleDeleteUser = async (id?: number) => {
-    if (!id) return;
-    if (!confirm("¿Eliminar este usuario?")) return;
-    await db.users.delete(id);
   };
 
   return (
@@ -129,36 +122,6 @@ export default function AdminPage() {
         </button>
       </form>
 
-      <div className="card p-4 border border-slate-800">
-        <h3 className="text-sm font-semibold text-slate-100 mb-2">
-          Usuarios registrados
-        </h3>
-        <ul className="space-y-1 text-xs text-slate-200">
-          {(users ?? []).map((u) => (
-            <li
-              key={u.id}
-              className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/60 px-3 py-1.5"
-            >
-              <div>
-                <p className="font-medium">
-                  {u.username}{" "}
-                  <span className="ml-1 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
-                    {u.role}
-                  </span>
-                </p>
-                <p className="text-[11px] text-slate-400">{u.name}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleDeleteUser(u.id)}
-                className="text-[11px] text-red-400 hover:text-red-300"
-              >
-                Eliminar
-              </button>
-            </li>
-          ))}
-        </ul>
-      </div>
     </div>
   );
 }

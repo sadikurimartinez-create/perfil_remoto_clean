@@ -26,28 +26,6 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-async function ensureSeedUsers() {
-  const count = await db.users.count();
-  if (count > 0) return;
-
-  const seedUsers: Omit<UserRow, "id">[] = [
-    {
-      username: "admin",
-      passwordHash: "Admin2026!",
-      role: "ADMIN",
-      name: "Administrador General",
-    },
-    {
-      username: "analista1",
-      passwordHash: "Analista2026!",
-      role: "USER",
-      name: "Analista 1",
-    },
-  ];
-
-  await db.users.bulkAdd(seedUsers);
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,10 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        await ensureSeedUsers();
-        const stored = typeof window !== "undefined"
-          ? window.localStorage.getItem("perfilador.currentUser")
-          : null;
+        const stored =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("perfilador.currentUser")
+            : null;
         if (stored) {
           const parsed = JSON.parse(stored) as AuthUser;
           if (!cancelled) setUser(parsed);
@@ -77,24 +55,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     setLoading(true);
     try {
-      const found = await db.users
-        .where("username")
-        .equals(username)
-        .first();
-      if (!found || found.passwordHash !== password) {
-        throw new Error("Usuario o contraseña incorrectos");
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Usuario o contraseña incorrectos");
       }
-      const authUser: AuthUser = {
-        id: found.id as number,
-        username: found.username,
-        role: found.role,
-        name: found.name,
-      };
+      const data = (await res.json()) as AuthUser;
       window.localStorage.setItem(
         "perfilador.currentUser",
-        JSON.stringify(authUser)
+        JSON.stringify(data)
       );
-      setUser(authUser);
+      setUser(data);
       router.push("/");
     } finally {
       setLoading(false);
