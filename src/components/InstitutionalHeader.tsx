@@ -31,6 +31,17 @@ export function InstitutionalHeader() {
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-3">
+          {user && user.role === "ADMIN" && (
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/admin";
+              }}
+              className="text-[11px] sm:text-xs font-medium text-slate-400 hover:text-sky-300 transition-colors"
+            >
+              Administración
+            </button>
+          )}
           {user && (
             <button
               type="button"
