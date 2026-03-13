@@ -24,13 +24,6 @@ export async function POST(req: Request) {
   try {
     const { context, photos } = (await req.json()) as RefineBody;
 
-    if (!context || !context.trim()) {
-      return NextResponse.json(
-        { error: "Falta el contexto del analista." },
-        { status: 400 }
-      );
-    }
-
     const apiKey = getGeminiKey();
     if (!apiKey) {
       return NextResponse.json(
@@ -49,10 +42,12 @@ export async function POST(req: Request) {
             .join("\n")
         : "No se proporcionaron coordenadas de fotos.";
 
-    const prompt = `
-El analista escribió este contexto:
+    const cleanedContext = (context ?? "").trim();
 
-"${context}"
+    const prompt = `
+El analista escribió este contexto (puede estar vacío si aún no ha redactado nada):
+
+"${cleanedContext || "(sin contexto inicial; generar sugerencias solo a partir de la geografía)"}"
 
 Coordenadas aproximadas de las fotos:
 ${coordsText}
