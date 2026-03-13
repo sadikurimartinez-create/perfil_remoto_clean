@@ -73,7 +73,12 @@ async function readBibliographyContext(): Promise<string> {
 }
 
 function getGeminiModel(bibliographyContext: string) {
-  const apiKey = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
+  const fromModule = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
+  const fromProcess =
+    (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
+    (typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.trim()) ||
+    "";
+  const apiKey = fromModule || fromProcess;
   if (!apiKey) {
     throw new Error(
       "Falta la API key de Gemini. Comprueba en tu navegador: https://TU-DOMINIO.vercel.app/api/env-check " +

@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_API_KEY as GEMINI_KEY } from "@/lib/geminiEnv";
+function getGeminiKey(): string {
+  const fromModule = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
+  const fromProcess =
+    (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
+    (typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.trim()) ||
+    "";
+  return fromModule || fromProcess;
+}
 
 type RefineBody = {
   context: string;
@@ -23,10 +31,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey =
-      (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
-      (typeof process.env.GEMINI_API_KEY === "string" && process.env.GEMINI_API_KEY.trim()) ||
-      "";
+    const apiKey = getGeminiKey();
     if (!apiKey) {
       return NextResponse.json(
         { error: "Falta la clave de Gemini. En Vercel añade NEXT_PUBLIC_GEMINI_API_KEY para Production y haz Redeploy." },
