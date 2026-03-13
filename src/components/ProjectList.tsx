@@ -1,19 +1,22 @@
-"use client";
+\"use client\";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
-import { db as localDb } from "@/lib/localDb";
+import { useEffect, useState } from \"react\";
+import Link from \"next/link\";
+import { useRouter } from \"next/navigation\";
+import { useAuth } from \"@/context/AuthContext\";
+import { db as localDb } from \"@/lib/localDb\";
 import {
   collection,
+  deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   updateDoc,
-} from "firebase/firestore";
-import { getDb } from "@/lib/firebase";
+  where,
+} from \"firebase/firestore\";
+import { getDb } from \"@/lib/firebase\";
 
 type ProjectWithCount = {
   id: string;
@@ -42,17 +45,21 @@ export function ProjectList() {
     const db = getDb();
     const q = query(collection(db, "projects"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
-      const list: ProjectWithCount[] = snap.docs.map((d) => {
-        const data = d.data() as any;
-        return {
-          id: d.id,
-          name: data.name ?? "Sin nombre",
-          createdAt: data.createdAt ?? 0,
-          photoCount: data.photoCount ?? 0,
-          createdBy: data.createdBy,
-          lockedBy: data.lockedBy ?? null,
-        };
-      });
+      const list: ProjectWithCount[] = snap.docs
+        .map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            name: data.name ?? "Sin nombre",
+            createdAt: data.createdAt ?? 0,
+            photoCount: data.photoCount ?? 0,
+            createdBy: data.createdBy,
+            lockedBy: data.lockedBy ?? null,
+            // campo opcional en Firestore para borrado lógico
+            deleted: data.deleted === true,
+          } as ProjectWithCount & { deleted?: boolean };
+        })
+        .filter((p) => !p.deleted);
       setProjects(list);
     });
     return () => unsub();
@@ -93,19 +100,56 @@ export function ProjectList() {
   };
 
   const handleDeleteProject = async (projectId: string) => {
-    const isConfirmed = window.confirm(
-      "¿Estás seguro de eliminar este expediente y TODA su evidencia? Esta acción no se puede deshacer."
+    const firstConfirm = window.confirm(
+      "Advertencia 1/2: Está a punto de ELIMINAR por completo este expediente y su evidencia asociada (fotos y análisis locales). ¿Desea continuar?"
     );
-    if (!isConfirmed) return;
+    if (!firstConfirm) return;
+
+    const secondConfirm = window.confirm(
+      "Confirmación final 2/2: Esta acción es irreversible. El expediente dejará de aparecer en la lista y se eliminarán sus datos locales. ¿CONFIRMA la eliminación definitiva?"
+    );
+    if (!secondConfirm) return;
 
     try {
-      const db = getDb();
-      // borramos solo el documento del proyecto; las fotos/subcolecciones
-      // se manejarán en otra migración si hace falta
-      const ref = doc(db, "projects", projectId);
-      await updateDoc(ref, { deleted: true });
+      const firestore = getDb();
+
+      // Eliminar documento del proyecto en Firestore
+      const projectRef = doc(firestore, "projects", projectId);
+      await deleteDoc(projectRef);
+
+      // Eliminar análisis en Firestore vinculados a este proyecto (colección 'analyses')
+      const analysesCol = collection(firestore, "analyses");
+      const analysesSnap = await getDocs(
+        query(analysesCol, where("projectId", "==", projectId))
+      );
+      const deletePromises: Promise<void>[] = [];
+      analysesSnap.forEach((d) => {
+        deletePromises.push(deleteDoc(d.ref));
+      });
+      if (deletePromises.length > 0) {
+        await Promise.all(deletePromises);
+      }
+
+      // Eliminar espejo local en Dexie: proyecto, fotos y análisis asociados
+      await localDb.transaction(
+        "rw",
+        localDb.projects,
+        localDb.photos,
+        localDb.analyses,
+        async () => {
+          await localDb.photos.where("projectId").equals(projectId).delete();
+          await localDb.analyses.where("projectId").equals(projectId).delete();
+          await localDb.projects.delete(projectId);
+        }
+      );
     } catch (err) {
-      console.error("[ProjectList] Error al marcar expediente como eliminado:", err);
+      console.error(
+        "[ProjectList] Error al eliminar expediente y su evidencia:",
+        err
+      );
+      window.alert(
+        "Ocurrió un error al eliminar el expediente. Revise la consola o intente de nuevo."
+      );
     }
   };
 
