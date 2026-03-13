@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import exifr from "exifr";
+import imageCompression from "browser-image-compression";
 import { useProject } from "@/context/ProjectContext";
 import { TIPOS_IMAGEN } from "@/context/ProjectContext";
 import { db } from "@/lib/localDb";
@@ -24,12 +25,21 @@ export function CaptureAndAddPhoto() {
 
     setError(null);
     setGps(null);
-    setFile(selected);
-    setPreviewUrl(URL.createObjectURL(selected));
     setIsReading(true);
 
     try {
-      const exifGps = await exifr.gps(selected).catch(() => null);
+      // Compresión previa (salvavidas Android / móviles)
+      const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+      };
+      const compressed = await imageCompression(selected, options);
+
+      setFile(compressed);
+      setPreviewUrl(URL.createObjectURL(compressed));
+
+      const exifGps = await exifr.gps(compressed).catch(() => null);
       let lat: number | null = null;
       let lng: number | null = null;
       if (exifGps && typeof exifGps.latitude === "number" && typeof exifGps.longitude === "number") {
@@ -120,8 +130,15 @@ export function CaptureAndAddPhoto() {
       try {
         let lat: number | null = null;
         let lng: number | null = null;
+        // Compresión previa para cada imagen de galería
+        const options = {
+          maxSizeMB: 1,
+          maxWidthOrHeight: 1920,
+          useWebWorker: true,
+        };
+        const compressed = await imageCompression(selected, options);
 
-        const exifGps = await exifr.gps(selected).catch(() => null);
+        const exifGps = await exifr.gps(compressed).catch(() => null);
         if (
           exifGps &&
           typeof exifGps.latitude === "number" &&
@@ -131,7 +148,7 @@ export function CaptureAndAddPhoto() {
           lng = exifGps.longitude;
         } else {
           const fullExif = (await exifr
-            .parse(selected, { gps: true })
+            .parse(compressed, { gps: true })
             .catch(() => null)) as Record<string, unknown> | null;
           if (fullExif?.latitude != null && fullExif?.longitude != null) {
             lat = fullExif.latitude as number;
@@ -148,7 +165,7 @@ export function CaptureAndAddPhoto() {
 
         const photoId = crypto.randomUUID();
         const projectId = project.id;
-        const preview = URL.createObjectURL(selected);
+        const preview = URL.createObjectURL(compressed);
 
         addPhotoToAlbum(
           {
@@ -157,7 +174,7 @@ export function CaptureAndAddPhoto() {
             lng,
             tipo,
             comentario: comentario.trim(),
-            file: selected,
+            file: compressed,
           },
           photoId
         );
@@ -175,7 +192,7 @@ export function CaptureAndAddPhoto() {
             await db.photos.add({
               id: photoId,
               projectId,
-              imageBlob: selected,
+              imageBlob: compressed,
               tag: tipo,
               comments: comentario.trim(),
               lat,
@@ -207,24 +224,18 @@ export function CaptureAndAddPhoto() {
           Captura / Subida de fotografía
         </h3>
         <p className="text-sm text-slate-400">
-          Tome o seleccione una imagen. Indique tipo y comentario y agréguela al álbum.
+          Elija si quiere tomar una foto con la cámara o subirla desde la galería del dispositivo. Solo se aceptan imágenes con GPS.
         </p>
       </header>
 
-      <label className="input-file">
-        <div className="flex flex-col items-center gap-2 text-sm text-slate-300">
-          <span className="font-medium">Toca o haz clic para capturar o seleccionar imagen</span>
-          <span className="text-xs text-slate-500">JPG, JPEG, HEIC. Con GPS activado.</span>
-        </div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-      </label>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       <input
         ref={galleryInputRef}
@@ -235,13 +246,22 @@ export function CaptureAndAddPhoto() {
         onChange={handleGalleryUpload}
       />
 
-      <button
-        type="button"
-        onClick={() => galleryInputRef.current?.click()}
-        className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800"
-      >
-        Subir desde galería
-      </button>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800"
+        >
+          Tomar foto (Cámara)
+        </button>
+        <button
+          type="button"
+          onClick={() => galleryInputRef.current?.click()}
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800"
+        >
+          Subir desde galería
+        </button>
+      </div>
 
       {isReading && (
         <p className="text-sm text-sky-400">Leyendo metadatos EXIF…</p>
