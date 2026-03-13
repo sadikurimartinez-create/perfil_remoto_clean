@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { db } from "@/lib/localDb";
 import {
   collection,
   doc,
@@ -78,6 +79,14 @@ export function ProjectList() {
         photoCount: 0,
       })
     );
+    // Crear espejo local en Dexie para que el Workspace cargue proyecto y fotos
+    await dbLocal.projects.add({
+      id: ref.id,
+      name: nombre,
+      createdAt,
+      createdBy: user.username,
+      lockedBy: null,
+    });
     setShowPrompt(false);
     setNombreInput("");
     router.push(`/project/${ref.id}`);
