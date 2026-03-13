@@ -1,8 +1,23 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Link from "next/link";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+
+type UserDoc = {
+  id: string;
+  username: string;
+  role: string;
+  name: string;
+};
 
 export default function AdminPage() {
   const { user } = useAuth();
@@ -10,6 +25,28 @@ export default function AdminPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [users, setUsers] = useState<UserDoc[]>([]);
+  const [message, setMessage] = useState<{ type: "ok" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    if (!user || user.role !== "ADMIN") return;
+    const db = getDb();
+    const unsub = onSnapshot(collection(db, "users"), (snap) => {
+      const list: UserDoc[] = snap.docs
+        .map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            username: data.username ?? "",
+            role: data.role ?? "USER",
+            name: data.name ?? "",
+          };
+        })
+        .sort((a, b) => b.id.localeCompare(a.id));
+      setUsers(list);
+    });
+    return () => unsub();
+  }, [user]);
 
   if (!user || user.role !== "ADMIN") {
     return (
@@ -30,18 +67,34 @@ export default function AdminPage() {
   const handleAddUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !password.trim() || !name.trim()) return;
-    await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    setMessage(null);
+    try {
+      const db = getDb();
+      await addDoc(collection(db, "users"), {
         username: username.trim(),
-        password: password,
+        passwordHash: password,
+        role: "USER",
         name: name.trim(),
-      }),
-    });
-    setUsername("");
-    setPassword("");
-    setName("");
+        createdAt: Date.now(),
+      });
+      setUsername("");
+      setPassword("");
+      setName("");
+      setMessage({ type: "ok", text: "Analista registrado correctamente." });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || "No se pudo registrar." });
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!confirm("¿Eliminar este usuario?")) return;
+    try {
+      const db = getDb();
+      await deleteDoc(doc(db, "users", id));
+      setMessage({ type: "ok", text: "Usuario eliminado." });
+    } catch (err: any) {
+      setMessage({ type: "error", text: err?.message || "No se pudo eliminar." });
+    }
   };
 
   return (
@@ -114,6 +167,15 @@ export default function AdminPage() {
             </div>
           </div>
         </div>
+        {message && (
+          <p
+            className={`text-xs ${
+              message.type === "ok" ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {message.text}
+          </p>
+        )}
         <button
           type="submit"
           className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-500"
@@ -122,6 +184,36 @@ export default function AdminPage() {
         </button>
       </form>
 
+      <div className="card p-4 border border-slate-800">
+        <h3 className="text-sm font-semibold text-slate-100 mb-2">
+          Usuarios registrados
+        </h3>
+        <ul className="space-y-1 text-xs text-slate-200">
+          {users.map((u) => (
+            <li
+              key={u.id}
+              className="flex items-center justify-between rounded border border-slate-800 bg-slate-900/60 px-3 py-1.5"
+            >
+              <div>
+                <p className="font-medium">
+                  {u.username}{" "}
+                  <span className="ml-1 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase tracking-wide">
+                    {u.role}
+                  </span>
+                </p>
+                <p className="text-[11px] text-slate-400">{u.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDeleteUser(u.id)}
+                className="text-[11px] text-red-400 hover:text-red-300"
+              >
+                Eliminar
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

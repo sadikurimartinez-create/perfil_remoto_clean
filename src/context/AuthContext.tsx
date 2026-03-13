@@ -8,10 +8,11 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { db, type UserRow } from "@/lib/localDb";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 type AuthUser = {
-  id: number;
+  id: number | string;
   username: string;
   role: "ADMIN" | "USER";
   name: string;
@@ -87,23 +88,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      // Si en el futuro configuramos un backend real, se puede reactivar:
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Usuario o contraseña incorrectos");
-      }
-      const data = (await res.json()) as AuthUser;
-      window.localStorage.setItem(
-        "perfilador.currentUser",
-        JSON.stringify(data)
+      // Usuarios creados por el admin en Firestore
+      const db = getDb();
+      const q = query(
+        collection(db, "users"),
+        where("username", "==", username.trim())
       );
-      setUser(data);
-      router.push("/");
+      const snap = await getDocs(q);
+      const docSnap = snap.docs[0];
+      if (docSnap) {
+        const data = docSnap.data() as { passwordHash?: string; role?: string; name?: string };
+        if (data.passwordHash === password) {
+          const authUser: AuthUser = {
+            id: docSnap.id,
+            username: username.trim(),
+            role: (data.role as "USER") || "USER",
+            name: (data.name as string) || username.trim(),
+          };
+          window.localStorage.setItem(
+            "perfilador.currentUser",
+            JSON.stringify(authUser)
+          );
+          setUser(authUser);
+          router.push("/");
+          return;
+        }
+      }
+
+      throw new Error("Usuario o contraseña incorrectos");
     } finally {
       setLoading(false);
     }
