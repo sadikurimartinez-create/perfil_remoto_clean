@@ -1,10 +1,10 @@
-\"use client\";
+"use client";
 
-import { useEffect, useState } from \"react\";
-import Link from \"next/link\";
-import { useRouter } from \"next/navigation\";
-import { useAuth } from \"@/context/AuthContext\";
-import { db as localDb } from \"@/lib/localDb\";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { db as localDb } from "@/lib/localDb";
 import {
   collection,
   deleteDoc,
@@ -15,8 +15,8 @@ import {
   query,
   updateDoc,
   where,
-} from \"firebase/firestore\";
-import { getDb } from \"@/lib/firebase\";
+} from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
 
 type ProjectWithCount = {
   id: string;
