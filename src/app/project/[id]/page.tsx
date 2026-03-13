@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
+import { db } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
 import {
