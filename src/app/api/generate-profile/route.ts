@@ -66,9 +66,7 @@ async function readBibliographyContext(): Promise<string> {
 }
 
 function getGeminiModel(bibliographyContext: string) {
-  // Tu API key de Gemini:
-  const apiKey = "AIzaSyAYUpug0J6IqDDbML8PSVTkBsi4avYxxH8";
-
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("Falta la variable de entorno GEMINI_API_KEY.");
   }
