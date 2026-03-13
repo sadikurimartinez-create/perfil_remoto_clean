@@ -82,11 +82,14 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiProfile, setAiProfile] = useState<string | null>(null);
+  const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
+  const [aiSuggestions, setAiSuggestions] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
 
   const handleGenerarAnalisis = async () => {
     if (selectedIds.length === 0) {
@@ -151,12 +154,12 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
   };
 
   const handleSaveAnalysis = async () => {
-    if (!aiProfile || !projectId) return;
+    if (!editableProfile.trim() || !projectId) return;
     setIsSavingAnalysis(true);
     try {
       await db.analyses.add({
         projectId,
-        content: aiProfile,
+        content: editableProfile,
         createdAt: Date.now(),
       });
     } catch (err) {
@@ -214,7 +217,9 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
         throw new Error(text || "Error al generar el perfil de IA");
       }
       const data = (await res.json()) as { markdown: string };
-      setAiProfile(data.markdown ?? "");
+      const markdown = data.markdown ?? "";
+      setAiProfile(markdown);
+      setEditableProfile(markdown);
     } catch (err) {
       console.error(err);
       setError(
@@ -413,8 +418,15 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
                 : "Guardar Análisis en Expediente"}
             </button>
           )}
-          <div className="prose prose-invert max-w-none text-sm bg-slate-950/60 rounded-lg border border-slate-700 px-4 py-3 whitespace-pre-wrap">
-            {aiProfile}
+          <div className="space-y-1">
+            <label className="block text-xs font-semibold text-slate-200">
+              Dictamen editable por el analista
+            </label>
+            <textarea
+              value={editableProfile}
+              onChange={(e) => setEditableProfile(e.target.value)}
+              className="w-full min-h-[500px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y"
+            />
           </div>
         </div>
       )}
@@ -426,7 +438,7 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
               Configuración del Análisis Táctico
             </h3>
             {selectedIds.length >= 2 && (
-              <div className="space-y-1">
+              <div className="space-y-2">
                 <label className="block text-xs font-medium text-slate-300">
                   Hipótesis del investigador (contexto del cruce de ubicaciones)
                 </label>
@@ -437,9 +449,77 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
                   className="w-full rounded-md border border-slate-700 bg-slate-800 text-slate-100 px-3 py-2 text-sm resize-none"
                   placeholder="Ejemplo: Posible corredor de riesgo entre polígono habitacional y zona de bares, con vulnerabilidad en rutas peatonales sin vigilancia..."
                 />
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!analysisContext.trim()) return;
+                      setIsRefining(true);
+                      setAiSuggestions("");
+                      try {
+                        const selected = album.filter((p) =>
+                          selectedIds.includes(p.id)
+                        );
+                        const minimalPhotos = selected.map((p) => ({
+                          lat: p.lat,
+                          lng: p.lng,
+                        }));
+                        const res = await fetch("/api/refine-context", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            context: analysisContext,
+                            photos: minimalPhotos,
+                          }),
+                        });
+                        const data = await res.json();
+                        if (res.ok) {
+                          setAiSuggestions(data.suggestions ?? "");
+                        } else {
+                          setError(
+                            data.error ||
+                              "No se pudieron obtener sugerencias de IA."
+                          );
+                        }
+                      } catch (err) {
+                        console.error("[PhotoAlbum] refine-context error:", err);
+                        setError(
+                          err instanceof Error
+                            ? err.message
+                            : "No se pudieron obtener sugerencias de IA."
+                        );
+                      } finally {
+                        setIsRefining(false);
+                      }
+                    }}
+                    disabled={isRefining || !analysisContext.trim()}
+                    className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
+                  >
+                    {isRefining
+                      ? "Pidiendo sugerencias…"
+                      : "Pedir Sugerencias a IA"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowConfigModal(false)}
+                    className="rounded-md border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                {aiSuggestions && (
+                  <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200">
+                    <p className="font-semibold mb-1">Sugerencias de IA:</p>
+                    <p className="whitespace-pre-wrap">{aiSuggestions}</p>
+                    <p className="mt-1 text-[10px] text-yellow-300/80">
+                      Revise estas ideas y, si lo considera útil, incorpórelas
+                      en su contexto antes de ejecutar el análisis final.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
-            <div className="space-y-2">
+            <div className="space-y-2 pt-1">
               <label className="block text-xs font-medium text-slate-300">
                 Radio de búsqueda geoespacial
               </label>
@@ -460,13 +540,6 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowConfigModal(false)}
-                className="rounded-md border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800"
-              >
-                Cancelar
-              </button>
               <button
                 type="button"
                 onClick={() => void confirmAndGenerateProfile()}
