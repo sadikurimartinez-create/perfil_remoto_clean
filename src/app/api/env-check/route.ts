@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
  * Útil para depurar en Vercel. Llamar a: tu-dominio.vercel.app/api/env-check
  */
 export async function GET() {
-  const env = typeof process !== "undefined" ? process.env : {};
+  const env = typeof process !== "undefined" ? process.env : ({} as Record<string, string | undefined>);
   const hasGemini =
     !!env.GEMINI_API_KEY && String(env.GEMINI_API_KEY).trim().length > 0;
   const hasNextPublicGemini =
