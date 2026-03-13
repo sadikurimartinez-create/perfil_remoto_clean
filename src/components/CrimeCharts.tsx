@@ -104,7 +104,7 @@ export function CrimeCharts({ crimes }: { crimes: CrimeRecord[] }) {
                 cy="50%"
                 outerRadius={72}
                 label={({ name, percent }) =>
-                  `${name} ${(percent * 100).toFixed(0)}%`
+                  `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
                 }
               >
                 {byRango.map((_, index) => (
