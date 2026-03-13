@@ -66,10 +66,11 @@ async function readBibliographyContext(): Promise<string> {
 }
 
 function getGeminiModel(bibliographyContext: string) {
-  const apiKey =
-    process.env.GEMINI_API_KEY ?? process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+  // Para simplificar, usamos solo NEXT_PUBLIC_GEMINI_API_KEY,
+  // que ya confirmamos que está definido en Vercel (Production).
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Falta la variable de entorno GEMINI_API_KEY.");
+    throw new Error("Falta la variable de entorno NEXT_PUBLIC_GEMINI_API_KEY.");
   }
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
