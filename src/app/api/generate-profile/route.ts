@@ -11,6 +11,7 @@ import { getPool } from "@/lib/db";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
+import { GEMINI_API_KEY as GEMINI_KEY } from "@/lib/geminiEnv";
 
 type PhotoInput = {
   id: string;
@@ -72,19 +73,14 @@ async function readBibliographyContext(): Promise<string> {
 }
 
 function getGeminiModel(bibliographyContext: string) {
-  // En Vercel: usar GEMINI_API_KEY (solo servidor) o NEXT_PUBLIC_GEMINI_API_KEY.
-  // Ambas deben estar en Project Settings → Environment Variables para Production.
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
-    "";
-  if (!apiKey.trim()) {
+  const apiKey = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
+  if (!apiKey) {
     throw new Error(
-      "Falta la API key de Gemini. En Vercel: Project → Settings → Environment Variables, " +
-        "añade GEMINI_API_KEY (o NEXT_PUBLIC_GEMINI_API_KEY) para Production y vuelve a desplegar."
+      "Falta la API key de Gemini. Comprueba en tu navegador: https://TU-DOMINIO.vercel.app/api/env-check " +
+        "y en Vercel: Settings → Environment Variables (Production) → NEXT_PUBLIC_GEMINI_API_KEY o GEMINI_API_KEY → Redeploy."
     );
   }
-  const genAI = new GoogleGenerativeAI(apiKey.trim());
+  const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
     systemInstruction:
