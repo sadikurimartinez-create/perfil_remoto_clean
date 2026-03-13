@@ -162,8 +162,6 @@ export function ProjectList() {
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
               {list.map((p) => {
-                const isLockedByOther =
-                  p.lockedBy && p.lockedBy !== String(user.id);
                 return (
                   <li
                     key={p.id}
@@ -189,11 +187,6 @@ export function ProjectList() {
                           {p.createdBy ?? "Desconocido"}
                         </span>
                       </p>
-                      {isLockedByOther && (
-                        <p className="text-[11px] text-red-400 mt-0.5">
-                          🔒 En uso por otro analista
-                        </p>
-                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <button
@@ -205,15 +198,10 @@ export function ProjectList() {
                       </button>
                       <button
                         type="button"
-                        disabled={!!isLockedByOther}
                         onClick={() => {
-                          if (!isLockedByOther) router.push(`/project/${p.id}`);
+                          router.push(`/project/${p.id}`);
                         }}
-                        className={`inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium ${
-                          isLockedByOther
-                            ? "bg-slate-700 text-slate-400 cursor-not-allowed"
-                            : "bg-sky-600 text-white hover:bg-sky-500"
-                        }`}
+                        className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium bg-sky-600 text-white hover:bg-sky-500"
                       >
                         Abrir Proyecto
                       </button>

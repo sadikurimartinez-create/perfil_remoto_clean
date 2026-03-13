@@ -9,8 +9,6 @@ import { PhotoAlbum } from "@/components/PhotoAlbum";
 import { db, type AnalysisRow } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
-import { doc, getDoc, onSnapshot, updateDoc } from "firebase/firestore";
-import { getDb } from "@/lib/firebase";
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -19,7 +17,6 @@ export default function ProjectWorkspacePage() {
   const { project, loadProject, removePhotoFromAlbum, album } = useProject();
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
-  const [lockedByOther, setLockedByOther] = useState<string | null>(null);
   const { user, loading: loadingAuth } = useAuth();
 
   const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
@@ -35,47 +32,7 @@ export default function ProjectWorkspacePage() {
     let cancelled = false;
     (async () => {
       try {
-        const firestore = getDb();
-        const ref = doc(firestore, "projects", projectId);
-        const snap = await getDoc(ref);
-        if (cancelled) return;
-        if (!snap.exists()) {
-          setNotFound(true);
-          return;
-        }
-
-        const data = snap.data() as any;
-        if (
-          data.lockedBy &&
-          data.lockedBy !== String(user.id) &&
-          user.role !== "ADMIN"
-        ) {
-          setLockedByOther(data.lockedBy);
-          router.push("/");
-          return;
-        }
-
-        await updateDoc(ref, { lockedBy: String(user.id) });
         await loadProject(projectId);
-
-        // suscripción para expulsar si otro toma el lock
-        const unsub = onSnapshot(ref, (s) => {
-          const d = s.data() as any;
-          if (
-            d?.lockedBy &&
-            d.lockedBy !== String(user.id) &&
-            user.role !== "ADMIN"
-          ) {
-            setLockedByOther(d.lockedBy);
-            router.push("/");
-          }
-        });
-        if (!cancelled) {
-          // guardar para limpiar al desmontar
-          (window as any).__perfilador_unsub_lock = unsub;
-        } else {
-          unsub();
-        }
       } catch (e) {
         if (!cancelled) setNotFound(true);
       } finally {
@@ -84,11 +41,6 @@ export default function ProjectWorkspacePage() {
     })();
     return () => {
       cancelled = true;
-      const maybeUnsub = (window as any).__perfilador_unsub_lock;
-      if (typeof maybeUnsub === "function") {
-        maybeUnsub();
-        (window as any).__perfilador_unsub_lock = undefined;
-      }
     };
   }, [projectId, loadProject, user, loadingAuth, router]);
 
@@ -106,24 +58,6 @@ export default function ProjectWorkspacePage() {
     return (
       <div className="flex items-center justify-center min-h-[200px] text-slate-400">
         Cargando expediente…
-      </div>
-    );
-  }
-
-  if (lockedByOther && !project) {
-    return (
-      <div className="card p-6 text-center space-y-3">
-        <p className="text-sm text-red-400 font-semibold">
-          Acceso denegado: este expediente está en uso por otro analista (ID:{" "}
-          {lockedByOther}).
-        </p>
-        <button
-          type="button"
-          onClick={() => router.push("/")}
-          className="inline-flex items-center justify-center rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-600"
-        >
-          Volver al inicio
-        </button>
       </div>
     );
   }
@@ -165,12 +99,7 @@ export default function ProjectWorkspacePage() {
         </div>
         <button
           type="button"
-          onClick={async () => {
-            if (projectId) {
-              const firestore = getDb();
-              const ref = doc(firestore, "projects", projectId);
-              await updateDoc(ref, { lockedBy: null });
-            }
+          onClick={() => {
             router.push("/");
           }}
           className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
