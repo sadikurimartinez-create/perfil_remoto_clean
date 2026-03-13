@@ -532,10 +532,9 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     console.error("[api/generate-profile] Error inesperado:", error);
-    return NextResponse.json(
-      { error: "Error interno al generar el perfil criminológico." },
-      { status: 500 }
-    );
+    const message =
+      error instanceof Error ? error.message : "Error interno al generar el perfil criminológico.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
