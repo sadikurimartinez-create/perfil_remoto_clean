@@ -344,25 +344,6 @@ export async function POST(req: Request) {
       photosWithCoords.reduce((acc, p) => acc + (p.lng as number), 0) /
       photosWithCoords.length;
 
-    const geminiKey =
-      (process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "").trim();
-    const mapsKey =
-      (process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "").trim();
-    const missing: string[] = [];
-    if (!geminiKey) missing.push("GEMINI_API_KEY o NEXT_PUBLIC_GEMINI_API_KEY");
-    if (!mapsKey) missing.push("GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
-    if (missing.length > 0) {
-      return NextResponse.json(
-        {
-          error:
-            "No se puede conectar con las APIs de Google. En Vercel → Project → Settings → Environment Variables, añade para Production: " +
-            missing.join("; ") +
-            ". Luego haz Redeploy.",
-        },
-        { status: 500 }
-      );
-    }
-
     const radiusMeters =
       typeof body.analysisRadius === "number" && body.analysisRadius > 0
         ? body.analysisRadius
