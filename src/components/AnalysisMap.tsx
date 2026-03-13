@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, HeatmapLayer, Marker, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
@@ -24,6 +24,9 @@ function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolea
 }
 
 export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
   const photosWithCoords = useMemo(
     () => album.filter(hasValidCoords) as Array<{ id: string; lat: number; lng: number; tipo: string; comentario: string }>,
     [album]
@@ -36,19 +39,42 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
     return { lat, lng };
   }, [photosWithCoords]);
 
+  const crimesWithCoords = useMemo(
+    () => (analysisResult?.historicalCrimes ?? []).filter((c) => hasValidCoords(c)),
+    [analysisResult?.historicalCrimes]
+  );
+
+  const poisWithCoords = useMemo(
+    () => (analysisResult?.pois ?? []).filter((p) => hasValidCoords(p)),
+    [analysisResult?.pois]
+  );
+
+  const boundsPoints = useMemo(() => {
+    const points: Array<{ lat: number; lng: number }> = [];
+    photosWithCoords.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
+    crimesWithCoords.forEach((c) => points.push({ lat: c.lat as number, lng: c.lng as number }));
+    poisWithCoords.forEach((p) => points.push({ lat: p.lat, lng: p.lng }));
+    return points;
+  }, [photosWithCoords, crimesWithCoords, poisWithCoords]);
+
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    setMapReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !mapReady || typeof window === "undefined" || !(window as any).google || boundsPoints.length === 0) return;
+    const g = (window as any).google as typeof google;
+    const bounds = new g.maps.LatLngBounds();
+    boundsPoints.forEach((pt) => bounds.extend(new g.maps.LatLng(pt.lat, pt.lng)));
+    mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
+  }, [mapReady, boundsPoints]);
+
   const { isLoaded, loadError } = useJsApiLoader({
     id: "analysis-map",
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
     libraries: ["visualization"],
   });
-
-  const perPhotoMap = useMemo(() => {
-    const map = new Map<string, { visionLabels?: string[] }>();
-    analysisResult?.perPhotoFindings?.forEach((f) => {
-      map.set(f.photoId, { visionLabels: f.visionLabels });
-    });
-    return map;
-  }, [analysisResult?.perPhotoFindings]);
 
   const heatmapCrimeData = useMemo(() => {
     if (
@@ -90,6 +116,7 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
         mapContainerStyle={containerStyle}
         center={center}
         zoom={15}
+        onLoad={onMapLoad}
         options={{
           streetViewControl: false,
           mapTypeControl: false,
@@ -109,12 +136,20 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           }}
         />
 
-        {/* Marcadores de cada fotografía con coordenadas válidas */}
+        {/* Pines rojos: una foto seleccionada = un pin destacado */}
         {photosWithCoords.map((p) => (
           <Marker
             key={p.id}
             position={{ lat: p.lat, lng: p.lng }}
             title={`${p.tipo} - ${p.comentario ?? ""}`}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 10,
+              fillColor: "#dc2626",
+              fillOpacity: 1,
+              strokeColor: "#fef2f2",
+              strokeWeight: 2,
+            }}
           />
         ))}
 
@@ -133,9 +168,8 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           />
         )}
 
-        {analysisResult?.historicalCrimes
-          ?.filter((c) => hasValidCoords(c))
-          ?.map((c, idx) => (
+        {/* Delitos: puntos carmesí */}
+        {crimesWithCoords.map((c, idx) => (
           <Marker
             key={`crime-${idx}`}
             position={{ lat: c.lat as number, lng: c.lng as number }}
@@ -146,6 +180,23 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
               fillColor: "#991b1b",
               fillOpacity: 1,
               strokeColor: "#fecaca",
+              strokeWeight: 1,
+            }}
+          />
+        ))}
+
+        {/* POIs / atractores: azul o amarillo */}
+        {poisWithCoords.map((p, idx) => (
+          <Marker
+            key={`poi-${idx}`}
+            position={{ lat: p.lat, lng: p.lng }}
+            title={p.name}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 5,
+              fillColor: p.category === "expendioAlcohol" ? "#eab308" : "#2563eb",
+              fillOpacity: 1,
+              strokeColor: "#cbd5e1",
               strokeWeight: 1,
             }}
           />
@@ -164,9 +215,9 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
 
       <div className="p-3 border-t border-slate-700 space-y-2">
         <p className="text-xs text-slate-400">
-          {album.length} punto(s) de evidencia fotográfica y{" "}
-          {analysisResult?.historicalCrimes?.length ?? 0} incidentes
-          históricos representados en el mapa.
+          {photosWithCoords.length} foto(s) seleccionada(s),{" "}
+          {analysisResult?.historicalCrimes?.length ?? 0} delitos y{" "}
+          {poisWithCoords.length} atractores (POIs) en el mapa.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
           <div className="flex items-center gap-2">

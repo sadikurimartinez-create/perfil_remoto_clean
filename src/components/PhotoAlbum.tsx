@@ -4,6 +4,7 @@ import { useState } from "react";
 import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
+import { CrimeCharts } from "./CrimeCharts";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -400,6 +401,9 @@ export function PhotoAlbum({
               {analysisResult.unifiedProfile}
             </div>
           )}
+          {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
+            <CrimeCharts crimes={analysisResult.historicalCrimes} />
+          )}
           <div
             id="map-export-container"
             className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden"
@@ -464,7 +468,7 @@ export function PhotoAlbum({
             <h3 className="text-lg font-semibold text-slate-100">
               Configuración del Análisis Táctico
             </h3>
-            {selectedIds.length >= 2 && (
+            {selectedIds.length >= 1 && (
               <div className="space-y-2">
                 <label className="block text-xs font-medium text-slate-300">
                   Hipótesis del investigador (contexto del cruce de ubicaciones)
@@ -480,7 +484,6 @@ export function PhotoAlbum({
                   <button
                     type="button"
                     onClick={async () => {
-                      if (!analysisContext.trim()) return;
                       setIsRefining(true);
                       setAiSuggestions("");
                       try {
@@ -519,7 +522,7 @@ export function PhotoAlbum({
                         setIsRefining(false);
                       }
                     }}
-                    disabled={isRefining || !analysisContext.trim()}
+                    disabled={isRefining || selectedIds.length < 1}
                     className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-60"
                   >
                     {isRefining
@@ -535,13 +538,44 @@ export function PhotoAlbum({
                   </button>
                 </div>
                 {aiSuggestions && (
-                  <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200">
+                  <div className="mt-2 rounded-md border border-yellow-700 bg-yellow-900/30 px-3 py-2 text-xs text-yellow-200 space-y-2">
                     <p className="font-semibold mb-1">Sugerencias de IA:</p>
                     <p className="whitespace-pre-wrap">{aiSuggestions}</p>
                     <p className="mt-1 text-[10px] text-yellow-300/80">
                       Revise estas ideas y, si lo considera útil, incorpórelas
                       en su contexto antes de ejecutar el análisis final.
                     </p>
+                    <div className="flex flex-wrap gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAiSuggestions("");
+                        }}
+                        className="rounded-md border border-red-800 bg-red-900/50 px-2 py-1 text-xs font-medium text-red-200 hover:bg-red-800/50"
+                      >
+                        Ignorar Sugerencia
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAnalysisContext((prev) => (prev ? `${prev}\n\n${aiSuggestions}` : aiSuggestions));
+                          setAiSuggestions("");
+                        }}
+                        className="rounded-md bg-emerald-700 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+                      >
+                        Aplicar 100%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setAnalysisContext(aiSuggestions);
+                          setAiSuggestions("");
+                        }}
+                        className="rounded-md bg-sky-700 px-2 py-1 text-xs font-medium text-white hover:bg-sky-600"
+                      >
+                        Editar Sugerencia
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -553,7 +587,7 @@ export function PhotoAlbum({
               <input
                 type="range"
                 min={100}
-                max={2000}
+                max={10000}
                 step={100}
                 value={analysisRadius}
                 onChange={(e) => setAnalysisRadius(Number(e.target.value))}
@@ -562,7 +596,7 @@ export function PhotoAlbum({
               <p className="text-xs text-slate-400">
                 Radio de búsqueda:{" "}
                 <span className="font-semibold text-slate-100">
-                  {analysisRadius} metros
+                  {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
                 </span>
               </p>
             </div>

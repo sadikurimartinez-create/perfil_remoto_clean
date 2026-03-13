@@ -8,7 +8,9 @@ import {
   useState,
   type ReactNode
 } from "react";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/localDb";
+import { getDb } from "@/lib/firebase";
 
 export const TIPOS_IMAGEN = [
   "Terrenos baldíos / Caminos sobre terrenos en breña",
@@ -62,6 +64,7 @@ export type AnalysisResult = {
     tipoDelito: string;
     rangoHorario: string | null;
   }>;
+  pois?: Array<{ lat: number; lng: number; name: string; category?: string }>;
   raw?: unknown;
 };
 
@@ -109,8 +112,17 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProject = useCallback(async (projectId: string) => {
-    const projectRow = await db.projects.get(projectId);
-    if (!projectRow) return;
+    let projectRow = await db.projects.get(projectId);
+    if (!projectRow) {
+      const firestore = getDb();
+      const ref = doc(firestore, "projects", projectId);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const data = snap.data() as { name?: string; createdAt?: number; createdBy?: string };
+      const name = data.name ?? "Sin nombre";
+      projectRow = { id: projectId, name, createdAt: data.createdAt ?? Date.now(), createdBy: data.createdBy };
+      await db.projects.put({ ...projectRow, lockedBy: null });
+    }
     const photoRows = await db.photos.where("projectId").equals(projectId).toArray();
     const albumPhotos: AlbumPhoto[] = photoRows
       .filter(

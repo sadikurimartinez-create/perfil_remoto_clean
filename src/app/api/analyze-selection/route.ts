@@ -185,12 +185,22 @@ export async function POST(req: Request) {
       rangoHorario: (row.rango_horario as string) ?? null
     }));
 
+    const pois = placesResult
+      ? [
+          ...placesResult.escuelas.map((p) => ({ lat: p.lat, lng: p.lng, name: p.nombre, category: p.categoria })),
+          ...placesResult.expendiosAlcohol.map((p) => ({ lat: p.lat, lng: p.lng, name: p.nombre, category: p.categoria })),
+          ...placesResult.chatarrerasOTalleres.map((p) => ({ lat: p.lat, lng: p.lng, name: p.nombre, category: p.categoria })),
+          ...placesResult.otros.map((p) => ({ lat: p.lat, lng: p.lng, name: p.nombre, category: p.categoria }))
+        ]
+      : [];
+
     return NextResponse.json(
       {
         perPhotoFindings,
         unifiedProfile,
         heatmapData,
         historicalCrimes,
+        pois,
         raw: {
           atractoresDelito,
           comerciosIrregulares
