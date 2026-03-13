@@ -4,7 +4,6 @@ import { useState } from "react";
 import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
-import { db } from "@/lib/localDb";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -67,9 +66,14 @@ function readFileAsBase64(file: File): Promise<string> {
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
   projectId?: string;
+  onSaveAnalysisToCloud?: (content: string) => Promise<void>;
 };
 
-export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
+export function PhotoAlbum({
+  onDeletePhoto,
+  projectId,
+  onSaveAnalysisToCloud,
+}: PhotoAlbumProps = {}) {
   const {
     album,
     selectedIds,
@@ -157,11 +161,9 @@ export function PhotoAlbum({ onDeletePhoto, projectId }: PhotoAlbumProps = {}) {
     if (!editableProfile.trim() || !projectId) return;
     setIsSavingAnalysis(true);
     try {
-      await db.analyses.add({
-        projectId,
-        content: editableProfile,
-        createdAt: Date.now(),
-      });
+      if (onSaveAnalysisToCloud) {
+        await onSaveAnalysisToCloud(editableProfile);
+      }
     } catch (err) {
       console.error("[PhotoAlbum] Error al guardar análisis:", err);
       setError(

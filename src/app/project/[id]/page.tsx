@@ -6,9 +6,26 @@ import { useParams, useRouter } from "next/navigation";
 import { useProject } from "@/context/ProjectContext";
 import { CaptureAndAddPhoto } from "@/components/CaptureAndAddPhoto";
 import { PhotoAlbum } from "@/components/PhotoAlbum";
-import { db, type AnalysisRow } from "@/lib/localDb";
 import { exportToWord } from "@/lib/exportToWord";
 import { useAuth } from "@/context/AuthContext";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  query,
+  where,
+} from "firebase/firestore";
+import { getDb } from "@/lib/firebase";
+
+type CloudAnalysis = {
+  id: string;
+  projectId: string;
+  content: string;
+  createdAt: number;
+  createdBy?: string;
+};
 
 export default function ProjectWorkspacePage() {
   const params = useParams();
@@ -19,7 +36,7 @@ export default function ProjectWorkspacePage() {
   const [notFound, setNotFound] = useState(false);
   const { user, loading: loadingAuth } = useAuth();
 
-  const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
+  const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
 
   useEffect(() => {
     if (!projectId) return;
@@ -43,6 +60,32 @@ export default function ProjectWorkspacePage() {
       cancelled = true;
     };
   }, [projectId, loadProject, user, loadingAuth, router]);
+
+  // Suscripción en tiempo real a los análisis guardados en Firestore
+  useEffect(() => {
+    if (!projectId) return;
+    const db = getDb();
+    const q = query(
+      collection(db, "analyses"),
+      where("projectId", "==", projectId)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      const list: CloudAnalysis[] = snap.docs
+        .map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            projectId: data.projectId as string,
+            content: (data.content as string) ?? "",
+            createdAt: (data.createdAt as number) ?? 0,
+            createdBy: data.createdBy as string | undefined,
+          };
+        })
+        .sort((a, b) => b.createdAt - a.createdAt);
+      setAnalyses(list);
+    });
+    return () => unsub();
+  }, [projectId]);
 
   const handleDeletePhoto = async (id: string) => {
     if (!confirm("¿Eliminar esta fotografía del expediente?")) return;
@@ -80,6 +123,17 @@ export default function ProjectWorkspacePage() {
     return null;
   }
 
+  const handleSaveAnalysisToCloud = async (content: string) => {
+    if (!projectId || !user) return;
+    const db = getDb();
+    await addDoc(collection(db, "analyses"), {
+      projectId,
+      content,
+      createdAt: Date.now(),
+      createdBy: user.username,
+    });
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -109,7 +163,11 @@ export default function ProjectWorkspacePage() {
       </div>
 
       <CaptureAndAddPhoto />
-      <PhotoAlbum onDeletePhoto={handleDeletePhoto} projectId={project.id} />
+      <PhotoAlbum
+        onDeletePhoto={handleDeletePhoto}
+        projectId={project.id}
+        onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
+      />
 
       {analyses && analyses.length > 0 && (
         <section className="card p-4 md:p-6 space-y-3 mt-2">
@@ -150,7 +208,8 @@ export default function ProjectWorkspacePage() {
                   <button
                     type="button"
                     onClick={async () => {
-                      await db.analyses.delete(a.id!);
+                      const db = getDb();
+                      await deleteDoc(doc(db, "analyses", a.id));
                     }}
                     className="inline-flex items-center gap-1 rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-red-500 transition-colors"
                   >
