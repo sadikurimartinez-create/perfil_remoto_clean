@@ -25,13 +25,6 @@ export async function POST(req: Request) {
     const { context, photos } = (await req.json()) as RefineBody;
 
     const apiKey = getGeminiKey();
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: "Falta la clave de Gemini. En Vercel añade NEXT_PUBLIC_GEMINI_API_KEY para Production y haz Redeploy." },
-        { status: 500 }
-      );
-    }
-
     const coordsText =
       photos && photos.length > 0
         ? photos
@@ -60,6 +53,15 @@ que el analista debería agregar a su contexto para mejorar el perfil criminoló
 Responde en español, en forma de viñetas cortas, sin repetir el contexto original.
 `.trim();
 
+    // Si no hay clave de Gemini, devolvemos sugerencias genéricas para no romper el flujo de la UI.
+    if (!apiKey) {
+      const fallback =
+        "• Describa iluminación (natural/artificial), visibilidad y puntos ciegos.\n" +
+        "• Señale rutas de acceso/escape, barreras físicas y posibles puntos de vigilancia.\n" +
+        "• Mencione presencia o ausencia de cámaras, flujo peatonal/vehicular y signos de deterioro (grafiti, basura, vidrios rotos).";
+      return NextResponse.json({ suggestions: fallback });
+    }
+
     const genAI = new GoogleGenerativeAI(apiKey.trim());
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
@@ -68,10 +70,12 @@ Responde en español, en forma de viñetas cortas, sin repetir el contexto origi
     return NextResponse.json({ suggestions: text });
   } catch (err) {
     console.error("[api/refine-context] Error:", err);
-    return NextResponse.json(
-      { error: "No se pudo refinar el contexto." },
-      { status: 500 }
-    );
+    // Degradación elegante: si Gemini falla, devolvemos sugerencias genéricas en vez de 500.
+    const fallback =
+      "• Añada observaciones sobre patrones de movimiento, horarios críticos y concentración de personas.\n" +
+      "• Vincule las características físicas del entorno con oportunidades y riesgos para el delito.\n" +
+      "• Incluya hipótesis sobre cómo el espacio favorece u obstaculiza la vigilancia natural y formal.";
+    return NextResponse.json({ suggestions: fallback });
   }
 }
 

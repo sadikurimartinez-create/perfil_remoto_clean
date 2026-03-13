@@ -5,6 +5,7 @@ import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
 import { CrimeCharts } from "./CrimeCharts";
+import { exportToWord } from "@/lib/exportToWord";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -90,6 +91,7 @@ export function PhotoAlbum({
   const [editableProfile, setEditableProfile] = useState<string>("");
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
+  const [hasSavedAnalysis, setHasSavedAnalysis] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
@@ -161,9 +163,11 @@ export function PhotoAlbum({
   const handleSaveAnalysis = async () => {
     if (!editableProfile.trim() || !projectId) return;
     setIsSavingAnalysis(true);
+    setError(null);
     try {
       if (onSaveAnalysisToCloud) {
         await onSaveAnalysisToCloud(editableProfile);
+        setHasSavedAnalysis(true);
       }
     } catch (err) {
       console.error("[PhotoAlbum] Error al guardar análisis:", err);
@@ -172,6 +176,7 @@ export function PhotoAlbum({
           ? err.message
           : "No se pudo guardar el análisis en el expediente."
       );
+      setHasSavedAnalysis(false);
     } finally {
       setIsSavingAnalysis(false);
     }
@@ -437,18 +442,6 @@ export function PhotoAlbum({
           <h4 className="text-base font-bold text-indigo-200">
             Perfil criminológico ambiental (IA completa)
           </h4>
-          {projectId && (
-            <button
-              type="button"
-              onClick={handleSaveAnalysis}
-              disabled={isSavingAnalysis}
-              className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-            >
-              {isSavingAnalysis
-                ? "Guardando análisis en expediente…"
-                : "Guardar Análisis en Expediente"}
-            </button>
-          )}
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-200">
               Dictamen editable por el analista
@@ -458,6 +451,34 @@ export function PhotoAlbum({
               onChange={(e) => setEditableProfile(e.target.value)}
               className="w-full min-h-[500px] bg-slate-900 text-slate-100 border border-slate-700 rounded-lg p-4 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y"
             />
+          </div>
+          <div className="flex flex-wrap gap-2 pt-1">
+            {projectId && (
+              <button
+                type="button"
+                onClick={handleSaveAnalysis}
+                disabled={isSavingAnalysis}
+                className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              >
+                {isSavingAnalysis
+                  ? "Guardando análisis en expediente…"
+                  : hasSavedAnalysis
+                  ? "Guardado en expediente"
+                  : "Guardar Análisis en Expediente"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() =>
+                exportToWord(
+                  editableProfile || aiProfile,
+                  "Dictamen_criminologico_ambiental"
+                )
+              }
+              className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
+            >
+              Exportar a Word
+            </button>
           </div>
         </div>
       )}
