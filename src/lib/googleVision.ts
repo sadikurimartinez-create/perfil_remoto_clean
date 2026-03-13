@@ -111,11 +111,14 @@ export async function analyzeBrokenWindowsWithVision(
   options: VisionRequestOptions
 ): Promise<VisionAnalysisResult | null> {
   const apiKey =
-    process.env.GOOGLE_CLOUD_VISION_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    process.env.GOOGLE_CLOUD_VISION_API_KEY ||
+    process.env.GOOGLE_MAPS_API_KEY ||
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ||
+    "";
 
-  if (!apiKey) {
+  if (!apiKey.trim()) {
     console.warn(
-      "[googleVision] No se encontró GOOGLE_CLOUD_VISION_API_KEY ni GOOGLE_MAPS_API_KEY en variables de entorno."
+      "[googleVision] No se encontró GOOGLE_CLOUD_VISION_API_KEY, GOOGLE_MAPS_API_KEY ni NEXT_PUBLIC_GOOGLE_MAPS_API_KEY en variables de entorno."
     );
     return null;
   }
@@ -132,7 +135,7 @@ export async function analyzeBrokenWindowsWithVision(
     );
   }
 
-  const url = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
+  const url = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey.trim()}`;
 
   const body = {
     requests: [

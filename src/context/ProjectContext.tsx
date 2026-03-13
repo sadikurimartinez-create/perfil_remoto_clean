@@ -34,8 +34,8 @@ export type TipoImagen = (typeof TIPOS_IMAGEN)[number];
 export type AlbumPhoto = {
   id: string;
   previewUrl: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   tipo: string;
   comentario: string;
   file?: File;
@@ -112,27 +112,46 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     const projectRow = await db.projects.get(projectId);
     if (!projectRow) return;
     const photoRows = await db.photos.where("projectId").equals(projectId).toArray();
-    const albumPhotos: AlbumPhoto[] = photoRows.map((p) => ({
-      id: p.id,
-      previewUrl: URL.createObjectURL(p.imageBlob),
-      lat: p.lat,
-      lng: p.lng,
-      tipo: p.tag,
-      comentario: p.comments,
-      file: new File([p.imageBlob], "photo.jpg", { type: p.imageBlob.type }),
-    }));
+    const albumPhotos: AlbumPhoto[] = photoRows
+      .filter(
+        (p) =>
+          p.lat != null &&
+          p.lng != null &&
+          !Number.isNaN(p.lat) &&
+          !Number.isNaN(p.lng)
+      )
+      .map((p) => ({
+        id: p.id,
+        previewUrl: URL.createObjectURL(p.imageBlob),
+        lat: p.lat,
+        lng: p.lng,
+        tipo: p.tag,
+        comentario: p.comments,
+        file: new File([p.imageBlob], "photo.jpg", { type: p.imageBlob.type }),
+      }));
     setProject({ id: projectRow.id, nombre: projectRow.name });
     setAlbum(albumPhotos);
     setSelectedIds([]);
     setAnalysisResultState(null);
   }, []);
 
-  const addPhotoToAlbum = useCallback((photo: Omit<AlbumPhoto, "id">, id?: string) => {
-    setAlbum((prev) => [
-      ...prev,
-      { ...photo, id: id ?? generateId() }
-    ]);
-  }, []);
+  const addPhotoToAlbum = useCallback(
+    (photo: Omit<AlbumPhoto, "id">, id?: string) => {
+      if (
+        photo.lat == null ||
+        photo.lng == null ||
+        Number.isNaN(photo.lat) ||
+        Number.isNaN(photo.lng)
+      ) {
+        console.warn(
+          "[ProjectContext] Intento de agregar foto sin coordenadas; se descarta."
+        );
+        return;
+      }
+      setAlbum((prev) => [...prev, { ...photo, id: id ?? generateId() }]);
+    },
+    []
+  );
 
   const removePhotoFromAlbum = useCallback((id: string) => {
     setAlbum((prev) => prev.filter((p) => p.id !== id));

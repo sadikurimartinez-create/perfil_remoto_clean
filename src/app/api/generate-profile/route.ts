@@ -14,12 +14,18 @@ import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
 
 type PhotoInput = {
   id: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   tipo: string;
   comentario: string;
   imageBase64?: string;
 };
+
+/** Evita "Cannot read properties of null (reading toFixed)" cuando lat/lng vienen sin GPS (ej. galería). */
+function formatCoord(n: number | null | undefined): string {
+  if (n == null || typeof n !== "number" || Number.isNaN(n)) return "N/A";
+  return n.toFixed(5);
+}
 
 type GenerateProfileBody = {
   photos: PhotoInput[];
@@ -66,13 +72,19 @@ async function readBibliographyContext(): Promise<string> {
 }
 
 function getGeminiModel(bibliographyContext: string) {
-  // Para simplificar, usamos solo NEXT_PUBLIC_GEMINI_API_KEY,
-  // que ya confirmamos que está definido en Vercel (Production).
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("Falta la variable de entorno NEXT_PUBLIC_GEMINI_API_KEY.");
+  // En Vercel: usar GEMINI_API_KEY (solo servidor) o NEXT_PUBLIC_GEMINI_API_KEY.
+  // Ambas deben estar en Project Settings → Environment Variables para Production.
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.NEXT_PUBLIC_GEMINI_API_KEY ||
+    "";
+  if (!apiKey.trim()) {
+    throw new Error(
+      "Falta la API key de Gemini. En Vercel: Project → Settings → Environment Variables, " +
+        "añade GEMINI_API_KEY (o NEXT_PUBLIC_GEMINI_API_KEY) para Production y vuelve a desplegar."
+    );
   }
-  const genAI = new GoogleGenerativeAI(apiKey);
+  const genAI = new GoogleGenerativeAI(apiKey.trim());
   return genAI.getGenerativeModel({
     model: "gemini-2.5-flash",
     systemInstruction:
@@ -89,9 +101,14 @@ async function reverseGeocode(
   lat: number,
   lng: number
 ): Promise<GeocodingResult> {
-  const key = process.env.GOOGLE_MAPS_API_KEY;
+  const key =
+    process.env.GOOGLE_MAPS_API_KEY ??
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
+    null;
   if (!key) {
-    console.warn("[generate-profile] Falta GOOGLE_MAPS_API_KEY para Geocoding.");
+    console.warn(
+      "[generate-profile] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY para Geocoding."
+    );
     return { formattedAddress: null, colonia: null };
   }
 
@@ -219,7 +236,7 @@ function buildPromptForGemini(params: {
     .map(
       (p) =>
         `- [${p.tipo}] Comentario: ${p.comentario || "(sin comentario)"} ` +
-        `Coordenadas: (${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})`
+        `Coordenadas: (${formatCoord(p.lat)}, ${formatCoord(p.lng)})`
     )
     .join("\n");
 
@@ -304,10 +321,48 @@ export async function POST(req: Request) {
       );
     }
 
+    const photosWithCoords = photos.filter(
+      (p) =>
+        p.lat != null &&
+        p.lng != null &&
+        !Number.isNaN(p.lat) &&
+        !Number.isNaN(p.lng)
+    );
+    if (photosWithCoords.length === 0) {
+      return NextResponse.json(
+        {
+          error:
+            "Ninguna foto tiene coordenadas GPS. Añade fotos con ubicación (cámara con GPS o imágenes con EXIF) o usa al menos una foto con coordenadas para el análisis.",
+        },
+        { status: 400 }
+      );
+    }
     const centerLat =
-      photos.reduce((acc, p) => acc + p.lat, 0) / photos.length;
+      photosWithCoords.reduce((acc, p) => acc + (p.lat as number), 0) /
+      photosWithCoords.length;
     const centerLng =
-      photos.reduce((acc, p) => acc + p.lng, 0) / photos.length;
+      photosWithCoords.reduce((acc, p) => acc + (p.lng as number), 0) /
+      photosWithCoords.length;
+
+    const geminiKey =
+      (process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "").trim();
+    const mapsKey =
+      (process.env.GOOGLE_MAPS_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "").trim();
+    const missing: string[] = [];
+    if (!geminiKey) missing.push("GEMINI_API_KEY o NEXT_PUBLIC_GEMINI_API_KEY");
+    if (!mapsKey) missing.push("GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY");
+    if (missing.length > 0) {
+      return NextResponse.json(
+        {
+          error:
+            "No se puede conectar con las APIs de Google. En Vercel → Project → Settings → Environment Variables, añade para Production: " +
+            missing.join("; ") +
+            ". Luego haz Redeploy.",
+        },
+        { status: 500 }
+      );
+    }
+
     const radiusMeters =
       typeof body.analysisRadius === "number" && body.analysisRadius > 0
         ? body.analysisRadius
@@ -398,9 +453,7 @@ export async function POST(req: Request) {
               .slice(0, 50)
               .map(
                 (c, idx) =>
-                  `${idx + 1}. ${c.tipo} en (${c.lat.toFixed(
-                    5
-                  )}, ${c.lng.toFixed(5)}) – archivo: ${c.fuente}`
+                  `${idx + 1}. ${c.tipo} en (${formatCoord(c.lat)}, ${formatCoord(c.lng)}) – archivo: ${c.fuente}`
               )
               .join("\n");
     } catch (e) {
@@ -450,9 +503,7 @@ export async function POST(req: Request) {
           .slice(0, 50)
           .map(
             (p, idx) =>
-              `${idx + 1}. ${p.name} (${p.category}) en (${p.lat.toFixed(
-                5
-              )}, ${p.lng.toFixed(5)}) – fuente: ${p.source}`
+              `${idx + 1}. ${p.name} (${p.category}) en (${formatCoord(p.lat)}, ${formatCoord(p.lng)}) – fuente: ${p.source}`
           )
           .join("\n");
         irregularidadesTexto +=

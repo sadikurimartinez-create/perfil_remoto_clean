@@ -10,8 +10,8 @@ import { getPool } from "@/lib/db";
 
 type PhotoPayload = {
   id: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   tipo: string;
   comentario: string;
   imageBase64?: string;
@@ -33,9 +33,27 @@ export async function POST(req: Request) {
       );
     }
 
+    const photosWithCoords = photos.filter(
+      (p) =>
+        p.lat != null &&
+        p.lng != null &&
+        !Number.isNaN(p.lat) &&
+        !Number.isNaN(p.lng)
+    );
+    if (photosWithCoords.length === 0) {
+      return NextResponse.json(
+        { error: "Ninguna foto tiene coordenadas GPS válidas para el análisis." },
+        { status: 400 }
+      );
+    }
+
     const radiusMeters = 500;
-    const centerLat = photos.reduce((a, p) => a + p.lat, 0) / photos.length;
-    const centerLng = photos.reduce((a, p) => a + p.lng, 0) / photos.length;
+    const centerLat =
+      photosWithCoords.reduce((a, p) => a + (p.lat as number), 0) /
+      photosWithCoords.length;
+    const centerLng =
+      photosWithCoords.reduce((a, p) => a + (p.lng as number), 0) /
+      photosWithCoords.length;
 
     const visionPromises = photos.map(async (p) => {
       if (!p.imageBase64)

@@ -16,7 +16,11 @@ const ELEVATION_BASE_URL =
   "https://maps.googleapis.com/maps/api/elevation/json";
 
 function getMapsApiKey(): string | null {
-  return process.env.GOOGLE_MAPS_API_KEY ?? null;
+  return (
+    process.env.GOOGLE_MAPS_API_KEY ??
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
+    null
+  );
 }
 
 function inferUnpavedOrRural(summary: string): boolean {
@@ -47,7 +51,7 @@ export async function analyzeEscapeRoutes(
   const apiKey = getMapsApiKey();
   if (!apiKey) {
     console.warn(
-      "[googleRoutes] Falta GOOGLE_MAPS_API_KEY en variables de entorno."
+      "[googleRoutes] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY en variables de entorno."
     );
     return null;
   }

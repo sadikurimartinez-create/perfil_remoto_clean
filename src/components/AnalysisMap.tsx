@@ -14,13 +14,27 @@ const containerStyle = {
   height: "320px",
 };
 
+function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolean {
+  return (
+    p.lat != null &&
+    p.lng != null &&
+    !Number.isNaN(p.lat) &&
+    !Number.isNaN(p.lng)
+  );
+}
+
 export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
+  const photosWithCoords = useMemo(
+    () => album.filter(hasValidCoords) as Array<{ id: string; lat: number; lng: number; tipo: string; comentario: string }>,
+    [album]
+  );
+
   const center = useMemo(() => {
-    if (album.length === 0) return { lat: 21.88, lng: -102.29 };
-    const lat = album.reduce((a, p) => a + p.lat, 0) / album.length;
-    const lng = album.reduce((a, p) => a + p.lng, 0) / album.length;
+    if (photosWithCoords.length === 0) return { lat: 21.88, lng: -102.29 };
+    const lat = photosWithCoords.reduce((a, p) => a + p.lat, 0) / photosWithCoords.length;
+    const lng = photosWithCoords.reduce((a, p) => a + p.lng, 0) / photosWithCoords.length;
     return { lat, lng };
-  }, [album]);
+  }, [photosWithCoords]);
 
   const { isLoaded, loadError } = useJsApiLoader({
     id: "analysis-map",
@@ -46,10 +60,12 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
       return [];
     }
     const g = (window as any).google as typeof google;
-    return analysisResult.historicalCrimes.map((c) => ({
-      location: new g.maps.LatLng(c.lat, c.lng),
-      weight: 1,
-    }));
+    return analysisResult.historicalCrimes
+      .filter((c) => hasValidCoords(c))
+      .map((c) => ({
+        location: new g.maps.LatLng(c.lat as number, c.lng as number),
+        weight: 1,
+      }));
   }, [analysisResult?.historicalCrimes, isLoaded]);
 
   if (loadError) {
@@ -93,8 +109,8 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           }}
         />
 
-        {/* Marcadores de cada fotografía seleccionada (evidencia) */}
-        {album.map((p) => (
+        {/* Marcadores de cada fotografía con coordenadas válidas */}
+        {photosWithCoords.map((p) => (
           <Marker
             key={p.id}
             position={{ lat: p.lat, lng: p.lng }}
@@ -102,7 +118,7 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           />
         ))}
 
-        {album.length > 0 && (
+        {photosWithCoords.length > 0 && (
           <Marker
             position={center}
             title="Centro del levantamiento fotográfico"
@@ -117,10 +133,12 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           />
         )}
 
-        {analysisResult?.historicalCrimes?.map((c, idx) => (
+        {analysisResult?.historicalCrimes
+          ?.filter((c) => hasValidCoords(c))
+          ?.map((c, idx) => (
           <Marker
             key={`crime-${idx}`}
-            position={{ lat: c.lat, lng: c.lng }}
+            position={{ lat: c.lat as number, lng: c.lng as number }}
             title={c.tipoDelito}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,

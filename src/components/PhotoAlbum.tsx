@@ -177,11 +177,25 @@ export function PhotoAlbum({
   };
 
   const confirmAndGenerateProfile = async () => {
+    const selected = album.filter((p) => selectedIds.includes(p.id));
+    const withCoords = selected.filter(
+      (p) =>
+        p.lat != null &&
+        p.lng != null &&
+        !Number.isNaN(p.lat) &&
+        !Number.isNaN(p.lng)
+    );
+    if (withCoords.length === 0) {
+      setError(
+        "Ninguna de las fotos seleccionadas tiene coordenadas GPS. Use fotos con ubicación (cámara o EXIF)."
+      );
+      setShowConfigModal(false);
+      return;
+    }
     setShowConfigModal(false);
     setError(null);
     setIsGeneratingAI(true);
     try {
-      const selected = album.filter((p) => selectedIds.includes(p.id));
       const photosPayload = await Promise.all(
         selected.map(async (p) => {
           let imageBase64: string | null = null;
@@ -216,7 +230,14 @@ export function PhotoAlbum({
 
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        throw new Error(text || "Error al generar el perfil de IA");
+        let msg = text || "Error al generar el perfil de IA";
+        try {
+          const json = JSON.parse(text) as { error?: string };
+          if (json.error) msg = json.error;
+        } catch {
+          /* usar text tal cual */
+        }
+        throw new Error(msg);
       }
       const data = (await res.json()) as { markdown: string };
       const markdown = data.markdown ?? "";
@@ -334,7 +355,11 @@ export function PhotoAlbum({
                   )}
                   <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5">{p.tipo}</p>
                   <p className="text-[10px] text-slate-500 truncate">{p.comentario || "—"}</p>
-                  <p className="text-[9px] text-slate-600 font-mono">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</p>
+                  <p className="text-[9px] text-slate-600 font-mono">
+                    {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
+                      ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`
+                      : "Sin GPS"}
+                  </p>
                 </div>
               </div>
             </label>

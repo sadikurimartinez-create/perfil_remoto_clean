@@ -3,8 +3,13 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 type RefineBody = {
   context: string;
-  photos?: { lat: number; lng: number }[];
+  photos?: { lat: number | null; lng: number | null }[];
 };
+
+function formatCoord(n: number | null | undefined): string {
+  if (n == null || typeof n !== "number" || Number.isNaN(n)) return "N/A";
+  return n.toFixed(6);
+}
 
 export async function POST(req: Request) {
   try {
@@ -17,10 +22,11 @@ export async function POST(req: Request) {
       );
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    const apiKey =
+      process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+    if (!apiKey.trim()) {
       return NextResponse.json(
-        { error: "Falta la variable GEMINI_API_KEY en el servidor." },
+        { error: "Falta GEMINI_API_KEY o NEXT_PUBLIC_GEMINI_API_KEY en el servidor." },
         { status: 500 }
       );
     }
@@ -30,9 +36,7 @@ export async function POST(req: Request) {
         ? photos
             .map(
               (p, i) =>
-                `Foto ${i + 1}: lat ${p.lat.toFixed(6)}, lng ${p.lng.toFixed(
-                  6
-                )}`
+                `Foto ${i + 1}: lat ${formatCoord(p.lat)}, lng ${formatCoord(p.lng)}`
             )
             .join("\n")
         : "No se proporcionaron coordenadas de fotos.";
@@ -53,7 +57,7 @@ que el analista debería agregar a su contexto para mejorar el perfil criminoló
 Responde en español, en forma de viñetas cortas, sin repetir el contexto original.
 `.trim();
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI(apiKey.trim());
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
     const result = await model.generateContent(prompt);
     const text = result.response.text();

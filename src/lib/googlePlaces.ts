@@ -25,7 +25,11 @@ const GOOGLE_PLACES_BASE_URL =
   "https://maps.googleapis.com/maps/api/place/nearbysearch/json";
 
 function getMapsApiKey(): string | null {
-  return process.env.GOOGLE_MAPS_API_KEY ?? null;
+  return (
+    process.env.GOOGLE_MAPS_API_KEY ??
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
+    null
+  );
 }
 
 function classifyPlace(types: string[], name: string): PlaceCategory {
@@ -70,7 +74,7 @@ export async function searchPlacesAround(
   const apiKey = getMapsApiKey();
   if (!apiKey) {
     console.warn(
-      "[googlePlaces] Falta GOOGLE_MAPS_API_KEY en variables de entorno."
+      "[googlePlaces] Falta GOOGLE_MAPS_API_KEY o NEXT_PUBLIC_GOOGLE_MAPS_API_KEY en variables de entorno."
     );
     return null;
   }
