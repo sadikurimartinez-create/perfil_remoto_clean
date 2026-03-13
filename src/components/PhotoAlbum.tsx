@@ -414,11 +414,11 @@ export function PhotoAlbum({
             className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden"
           >
             <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300">
-              <img src="/ssp-logo.png" alt="SSP" className="h-16 w-auto" />
+              <img src="/logos/logo-ssp.png" alt="SSP" className="h-16 w-auto" />
               <h2 className="text-xl font-bold text-center uppercase tracking-widest">
                 Perfil Criminológico Ambiental
               </h2>
-              <img src="/ceipol-logo.png" alt="CEIPOL" className="h-16 w-auto" />
+              <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-16 w-auto" />
             </div>
             <div className="p-2">
               <AnalysisMap
