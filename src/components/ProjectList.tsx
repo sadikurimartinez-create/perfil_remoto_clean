@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { db } from "@/lib/localDb";
+import { db as localDb } from "@/lib/localDb";
 import {
   collection,
   doc,
@@ -66,8 +66,8 @@ export function ProjectList() {
   const handleConfirmarNombre = async () => {
     const nombre = nombreInput.trim();
     if (!nombre || !user) return;
-    const db = getDb();
-    const col = collection(db, "projects");
+    const firestore = getDb();
+    const col = collection(firestore, "projects");
     const createdAt = Date.now();
     // Firestore generará el id, luego navegamos a ese proyecto
     const ref = await import("firebase/firestore").then(({ addDoc }) =>
@@ -80,7 +80,7 @@ export function ProjectList() {
       })
     );
     // Crear espejo local en Dexie para que el Workspace cargue proyecto y fotos
-    await dbLocal.projects.add({
+    await localDb.projects.add({
       id: ref.id,
       name: nombre,
       createdAt,
