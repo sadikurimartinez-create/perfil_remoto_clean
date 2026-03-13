@@ -13,6 +13,8 @@ import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
 import { GEMINI_API_KEY as GEMINI_KEY } from "@/lib/geminiEnv";
 
+export const runtime = "nodejs";
+
 type PhotoInput = {
   id: string;
   lat: number | null;
