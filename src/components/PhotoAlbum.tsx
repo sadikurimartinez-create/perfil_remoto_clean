@@ -166,7 +166,15 @@ export function PhotoAlbum({
     setError(null);
     try {
       if (onSaveAnalysisToCloud) {
-        await onSaveAnalysisToCloud(editableProfile);
+        const attachedPhotos = album
+          .filter((p) => selectedIds.includes(p.id))
+          .map((p) => ({
+            id: p.id,
+            lat: p.lat,
+            lng: p.lng,
+            tipo: p.tipo,
+          }));
+        await onSaveAnalysisToCloud(editableProfile, attachedPhotos);
         setHasSavedAnalysis(true);
       }
     } catch (err) {
