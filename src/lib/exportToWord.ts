@@ -2,58 +2,72 @@ import { Document, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { saveAs } from "file-saver";
 
 async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
-  return new Promise((resolve, reject) => {
+  // 1. Forzar descarga vía fetch con CORS
+  const response = await fetch(imageUrl, { mode: "cors" });
+  if (!response.ok) {
+    throw new Error(`No se pudo descargar la imagen (${response.status})`);
+  }
+  const blob = await response.blob();
+
+  // 2. Crear URL temporal local
+  const objectUrl = URL.createObjectURL(blob);
+
+  try {
+    // 3. Cargar la imagen de forma segura
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("No se pudo crear el contexto de canvas"));
-        return;
-      }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    img.src = objectUrl;
 
-      ctx.save();
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = "white";
-      ctx.font = "bold 80px Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate((-45 * Math.PI) / 180);
-      ctx.fillText("SSP AGS - CEIPOL", 0, 0);
-      ctx.restore();
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () =>
+        reject(new Error("Error cargando la imagen para el Word"));
+    });
 
+    // 4. Lógica del canvas
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width || img.naturalWidth;
+    canvas.height = img.height || img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      throw new Error("No se pudo crear el contexto de canvas");
+    }
+
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const fontSize = Math.floor(canvas.width / 15) || 48;
+    ctx.save();
+    ctx.globalAlpha = 0.4;
+    ctx.font = `bold ${fontSize}px Arial`;
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillText("SSP AGS - CEIPOL", 0, 0);
+    ctx.restore();
+
+    // 5. Devolver ArrayBuffer para docx
+    const stampedBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
       canvas.toBlob(
-        (blob) => {
-          if (!blob) {
+        async (outBlob) => {
+          if (!outBlob) {
             reject(new Error("No se pudo generar el blob de la imagen"));
             return;
           }
-          const reader = new FileReader();
-          reader.onload = () => {
-            const res = reader.result;
-            if (!(res instanceof ArrayBuffer)) {
-              reject(new Error("No se pudo leer la imagen estampada"));
-              return;
-            }
-            resolve(res);
-          };
-          reader.onerror = () => reject(reader.error);
-          reader.readAsArrayBuffer(blob);
+          const arrayBuffer = await outBlob.arrayBuffer();
+          resolve(arrayBuffer);
         },
         "image/jpeg",
-        0.9
+        0.85
       );
-    };
-    img.onerror = () => {
-      reject(new Error("No se pudo cargar la imagen para el sello de agua"));
-    };
-    img.src = imageUrl;
-  });
+    });
+
+    return stampedBuffer;
+  } finally {
+    // Liberar memoria del URL temporal
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export async function exportToWord(
@@ -82,8 +96,13 @@ export async function exportToWord(
       try {
         const stamped = await applyWatermarkForWord(url);
         imagesBuffers.push(stamped);
-      } catch {
-        // si una falla, seguimos con las demás
+      } catch (err) {
+        console.warn(
+          "[exportToWord] No se pudo procesar una imagen para el anexo fotográfico:",
+          url,
+          err
+        );
+        // si una imagen falla, seguimos con las restantes
       }
     }
 
