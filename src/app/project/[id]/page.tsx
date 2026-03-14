@@ -216,7 +216,10 @@ export default function ProjectWorkspacePage() {
                     onClick={() =>
                       exportToWord(
                         a.content,
-                        project.nombre || "Expediente_sin_nombre"
+                        project.nombre || "Expediente_sin_nombre",
+                        (a.attachedPhotos || [])
+                          .map((p) => album.find((ph) => ph.id === p.id)?.previewUrl)
+                          .filter((u): u is string => typeof u === "string")
                       )
                     }
                     className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
