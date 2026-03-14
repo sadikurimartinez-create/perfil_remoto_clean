@@ -34,6 +34,7 @@ type GenerateProfileBody = {
   photos: PhotoInput[];
   analysisContext?: string;
   analysisRadius?: number;
+  focusAreas?: string[];
 };
 
 type GeocodingResult = {
@@ -478,6 +479,7 @@ export async function POST(req: Request) {
     }
 
     let irregularidadesTexto = "";
+    let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
     try {
       const irregs = buildIrregularBusinesses(placesResult, denueResult);
       if (irregs.posiblesIrregulares.length > 0) {
@@ -513,7 +515,6 @@ export async function POST(req: Request) {
           }))
         : [];
       const mergedPois = mergeAndDeduplicatePOIs(denuePois, placesPois);
-      let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
       if (mergedPois.length > 0) {
         const resumenPOI = mergedPois
           .slice(0, 50)
