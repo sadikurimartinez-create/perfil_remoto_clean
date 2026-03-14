@@ -183,7 +183,7 @@ export default function ProjectWorkspacePage() {
               >
                 <div className="text-xs text-slate-300">
                   <p className="font-medium">
-                    Dictamen del{" "}
+                    Análisis criminológico ambiental del{" "}
                     {new Date(a.createdAt).toLocaleString("es-MX", {
                       day: "2-digit",
                       month: "short",
@@ -191,6 +191,12 @@ export default function ProjectWorkspacePage() {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Ordenado y guardado por:{" "}
+                    <span className="font-semibold text-slate-200">
+                      {a.createdBy || "Usuario no identificado"}
+                    </span>
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
