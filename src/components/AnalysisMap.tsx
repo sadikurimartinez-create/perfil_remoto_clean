@@ -110,6 +110,20 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
     );
   }
 
+  const getPoiIcon = (category?: string | null): { emoji: string; bg: string } => {
+    switch (category) {
+      case "escuela":
+        return { emoji: "🏫", bg: "#0ea5e9" };
+      case "expendioAlcohol":
+        return { emoji: "🍺", bg: "#eab308" };
+      case "chatarreraOTaller":
+        return { emoji: "🛠️", bg: "#f97316" };
+      case "otro":
+      default:
+        return { emoji: "📍", bg: "#22c55e" };
+    }
+  };
+
   return (
     <div className="rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50">
       <GoogleMap
@@ -136,7 +150,7 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           }}
         />
 
-        {/* Pines rojos: una foto seleccionada = un pin destacado */}
+        {/* Pines rojos: una foto seleccionada = un pin destacado (evidencia fotográfica) */}
         {photosWithCoords.map((p) => (
           <Marker
             key={p.id}
@@ -168,16 +182,22 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           />
         )}
 
-        {/* Delitos: puntos carmesí */}
+        {/* Delitos: puntos carmesí con cruz táctica */}
         {crimesWithCoords.map((c, idx) => (
           <Marker
             key={`crime-${idx}`}
             position={{ lat: c.lat as number, lng: c.lng as number }}
             title={c.tipoDelito}
+            label={{
+              text: "❌",
+              color: "#fee2e2",
+              fontSize: "10px",
+              fontWeight: "700",
+            }}
             icon={{
               path: google.maps.SymbolPath.CIRCLE,
-              scale: 4,
-              fillColor: "#991b1b",
+              scale: 6,
+              fillColor: "#7f1d1d",
               fillOpacity: 1,
               strokeColor: "#fecaca",
               strokeWeight: 1,
@@ -185,22 +205,29 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           />
         ))}
 
-        {/* POIs / atractores: azul o amarillo */}
-        {poisWithCoords.map((p, idx) => (
-          <Marker
-            key={`poi-${idx}`}
-            position={{ lat: p.lat, lng: p.lng }}
-            title={p.name}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 5,
-              fillColor: p.category === "expendioAlcohol" ? "#eab308" : "#2563eb",
-              fillOpacity: 1,
-              strokeColor: "#cbd5e1",
-              strokeWeight: 1,
-            }}
-          />
-        ))}
+        {/* POIs / atractores: íconos inteligentes por categoría */}
+        {poisWithCoords.map((p, idx) => {
+          const { emoji, bg } = getPoiIcon(p.category as string | undefined);
+          return (
+            <Marker
+              key={`poi-${idx}`}
+              position={{ lat: p.lat, lng: p.lng }}
+              title={p.name}
+              label={{
+                text: emoji,
+                fontSize: "12px",
+              }}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 6,
+                fillColor: bg,
+                fillOpacity: 1,
+                strokeColor: "#020617",
+                strokeWeight: 1,
+              }}
+            />
+          );
+        })}
 
         {heatmapCrimeData.length > 0 && (
           <HeatmapLayer
@@ -242,10 +269,18 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
             </span>
           </div>
         </div>
-        <p className="text-xs text-slate-400 mt-1">
-          Representación geoespacial del polígono de estudio en un radio de 500
-          metros a partir de los indicios fotográficos, ilustrando la
-          convergencia entre atractores delictivos e incidencia histórica.
+        <p className="text-sm text-slate-300 mt-1 text-justify leading-relaxed">
+          Análisis geoespacial pericial: el presente mapa ilustra un radio de proximidad de{" "}
+          <span className="font-semibold">500 metros</span> en torno a las coordenadas de los indicios fotográficos
+          considerados en el expediente. Se han georreferenciado{" "}
+          <span className="font-semibold">{poisWithCoords.length}</span>{" "}
+          atractores de riesgo o puntos de interés (comercios, servicios, espacios públicos) y{" "}
+          <span className="font-semibold">
+            {analysisResult?.historicalCrimes?.length ?? 0}
+          </span>{" "}
+          eventos de incidencia delictiva histórica. La convergencia espacial de estos elementos permite visualizar
+          patrones de oportunidad criminal, rutas de vulnerabilidad y zonas críticas para la focalización de
+          estrategias de disuasión y prevención situacional.
         </p>
       </div>
     </div>

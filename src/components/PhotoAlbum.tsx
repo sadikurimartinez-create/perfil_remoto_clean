@@ -433,14 +433,49 @@ export function PhotoAlbum({
             id="map-export-container"
             className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden"
           >
-            <div className="flex items-center justify-between px-4 py-2 border-b border-slate-300">
-              <img src="/logos/logo-ssp.png" alt="SSP" className="h-16 w-auto" />
-              <h2 className="text-xl font-bold text-center uppercase tracking-widest">
-                Perfil Criminológico Ambiental
-              </h2>
-              <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-16 w-auto" />
-            </div>
-            <div className="p-2">
+            <header className="flex items-center justify-between w-full px-6 py-4 border-b border-slate-300 bg-slate-50">
+              <div className="flex items-center justify-center">
+                <img
+                  src="/logos/logo-ssp.png"
+                  alt="Secretaría de Seguridad Pública"
+                  className="h-16 w-auto object-contain"
+                />
+              </div>
+              <div className="flex flex-col items-center justify-center text-center">
+                <p className="text-[13px] font-semibold tracking-wide text-slate-700">
+                  PERFILADOR CRIMINOLÓGICO AMBIENTAL
+                </p>
+                <p className="text-[12px] font-semibold tracking-wide text-slate-700">
+                  CEIPOL
+                </p>
+                <p className="text-[10px] font-semibold tracking-wide text-slate-600">
+                  SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES
+                </p>
+              </div>
+              <div className="flex items-center justify-center">
+                <img
+                  src="/logos/logo-ceipol.png"
+                  alt="CEIPOL"
+                  className="h-16 w-auto object-contain"
+                />
+              </div>
+            </header>
+            <div className="relative p-2">
+              {/* Sellos de agua institucionales */}
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-10">
+                <div className="flex flex-col items-center gap-4">
+                  <img
+                    src="/logos/logo-ssp.png"
+                    alt="SSP watermark"
+                    className="h-32 w-auto object-contain"
+                  />
+                  <img
+                    src="/logos/logo-ceipol.png"
+                    alt="CEIPOL watermark"
+                    className="h-24 w-auto object-contain"
+                  />
+                </div>
+              </div>
               <AnalysisMap
                 album={album.filter((p) => selectedIds.includes(p.id))}
                 analysisResult={analysisResult}
