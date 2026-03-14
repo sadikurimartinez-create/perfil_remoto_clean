@@ -1,11 +1,19 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import exifr from "exifr";
 import imageCompression from "browser-image-compression";
 import { useProject } from "@/context/ProjectContext";
 import { TIPOS_IMAGEN } from "@/context/ProjectContext";
 import { db } from "@/lib/localDb";
+
+const COMPRESSION_OPTIONS = {
+  maxSizeMB: 0.8,
+  maxWidthOrHeight: 1280,
+  useWebWorker: true,
+  initialQuality: 0.7,
+  alwaysKeepResolution: true,
+} as const;
 
 export function CaptureAndAddPhoto() {
   const { addPhotoToAlbum, project } = useProject();
@@ -19,23 +27,28 @@ export function CaptureAndAddPhoto() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
     if (!selected) return;
 
     setError(null);
     setGps(null);
+    if (previewUrl && previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
     setIsReading(true);
 
     try {
-      // Compresión previa (salvavidas Android / móviles)
-      const options = {
-        maxSizeMB: 1,
-        maxWidthOrHeight: 1920,
-        useWebWorker: true,
-      };
-      const compressed = await imageCompression(selected, options);
-
+      const compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
       setFile(compressed);
       setPreviewUrl(URL.createObjectURL(compressed));
 
@@ -110,6 +123,9 @@ export function CaptureAndAddPhoto() {
       );
     }
 
+    if (previewUrl && previewUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(previewUrl);
+    }
     setFile(null);
     setPreviewUrl(null);
     setGps(null);
@@ -130,13 +146,7 @@ export function CaptureAndAddPhoto() {
       try {
         let lat: number | null = null;
         let lng: number | null = null;
-        // Compresión previa para cada imagen de galería
-        const options = {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-        };
-        const compressed = await imageCompression(selected, options);
+        const compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
 
         const exifGps = await exifr.gps(compressed).catch(() => null);
         if (
@@ -231,7 +241,7 @@ export function CaptureAndAddPhoto() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg, image/png, image/webp"
         capture="environment"
         className="hidden"
         onChange={handleFileChange}
@@ -240,7 +250,7 @@ export function CaptureAndAddPhoto() {
       <input
         ref={galleryInputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg, image/png, image/webp"
         multiple
         className="hidden"
         onChange={handleGalleryUpload}
