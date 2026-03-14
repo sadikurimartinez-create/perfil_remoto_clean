@@ -34,7 +34,7 @@ export function ProjectList() {
   const { user, loading } = useAuth();
   const [projects, setProjects] = useState<ProjectWithCount[]>([]);
   const [allAnalyses, setAllAnalyses] = useState<
-    { id: string; projectId: string; content: string; createdAt: number; createdBy?: string }
+    { id: string; projectId: string; content: string; createdAt: number; createdBy?: string }[]
   >([]);
 
   useEffect(() => {
