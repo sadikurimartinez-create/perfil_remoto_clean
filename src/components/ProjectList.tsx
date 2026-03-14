@@ -33,6 +33,9 @@ export function ProjectList() {
   const [showPrompt, setShowPrompt] = useState(false);
   const { user, loading } = useAuth();
   const [projects, setProjects] = useState<ProjectWithCount[]>([]);
+  const [allAnalyses, setAllAnalyses] = useState<
+    { id: string; projectId: string; content: string; createdAt: number; createdBy?: string }
+  >([]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -61,6 +64,26 @@ export function ProjectList() {
         })
         .filter((p) => !p.deleted);
       setProjects(list);
+    });
+    return () => unsub();
+  }, [loading, user]);
+
+  useEffect(() => {
+    if (loading || !user) return;
+    const db = getDb();
+    const q = query(collection(db, "analyses"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q, (snap) => {
+      const list = snap.docs.map((d) => {
+        const data = d.data() as any;
+        return {
+          id: d.id,
+          projectId: data.projectId as string,
+          content: (data.content as string) ?? "",
+          createdAt: (data.createdAt as number) ?? 0,
+          createdBy: data.createdBy as string | undefined,
+        };
+      });
+      setAllAnalyses(list);
     });
     return () => unsub();
   }, [loading, user]);
@@ -206,12 +229,16 @@ export function ProjectList() {
           ) : (
             <ul className="grid gap-3 sm:grid-cols-2">
               {list.map((p) => {
+                const analysesForProject = allAnalyses.filter(
+                  (a) => a.projectId === p.id
+                );
                 return (
                   <li
                     key={p.id}
-                    className="card p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border border-slate-800 hover:border-slate-700"
+                    className="card p-4 flex flex-col gap-3 border border-slate-800 hover:border-slate-700"
                   >
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                       <h3 className="text-sm font-semibold text-slate-100 truncate">
                         {p.name}
                       </h3>
@@ -231,24 +258,60 @@ export function ProjectList() {
                           {p.createdBy ?? "Desconocido"}
                         </span>
                       </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteProject(p.id)}
+                          className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
+                        >
+                          Eliminar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            router.push(`/project/${p.id}`);
+                          }}
+                          className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium bg-sky-600 text-white hover:bg-sky-500"
+                        >
+                          Abrir Proyecto
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => void handleDeleteProject(p.id)}
-                        className="p-2 rounded text-xs text-red-400 hover:text-red-300 hover:bg-red-900/30 transition-colors"
-                      >
-                        Eliminar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          router.push(`/project/${p.id}`);
-                        }}
-                        className="inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium bg-sky-600 text-white hover:bg-sky-500"
-                      >
-                        Abrir Proyecto
-                      </button>
+                    <div className="mt-2 pt-2 border-t border-slate-800">
+                      {analysesForProject.length === 0 ? (
+                        <p className="text-sm text-slate-500 italic">
+                          Sin análisis generados aún.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {analysesForProject.slice(0, 3).map((a) => (
+                            <div
+                              key={a.id}
+                              className="bg-slate-900/50 p-3 rounded-md border border-slate-800"
+                            >
+                              <p className="text-[11px] text-sky-400 font-semibold">
+                                {new Date(a.createdAt).toLocaleString("es-MX", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}{" "}
+                                · Generado por:{" "}
+                                <span className="text-slate-100">
+                                  {a.createdBy || "Usuario no identificado"}
+                                </span>
+                              </p>
+                              <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                                {a.content.length > 120
+                                  ? `${a.content.substring(0, 120)}…`
+                                  : a.content}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </li>
                 );
