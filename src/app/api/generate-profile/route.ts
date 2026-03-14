@@ -221,6 +221,8 @@ function buildPromptForGemini(params: {
   strategySummary: string;
   analysisContext?: string;
   analysisRadius: number;
+  focusAreas: string[];
+  poiImages: Array<{ name: string; category: string; streetViewUrl: string }>;
 }): string {
   const {
     photos,
@@ -233,6 +235,8 @@ function buildPromptForGemini(params: {
     strategySummary,
     analysisContext,
     analysisRadius,
+    focusAreas,
+    poiImages,
   } = params;
 
   const comentariosInvestigador = photos
@@ -275,6 +279,21 @@ function buildPromptForGemini(params: {
     ? `Imagen de referencia de Street View (histórica/visual): ${streetViewUrl}`
     : "No se cuenta con imagen de Street View para este punto.";
 
+  const focusAreasTexto =
+    focusAreas && focusAreas.length > 0
+      ? focusAreas.join(", ")
+      : "no se marcaron objetivos prioritarios específicos; debes evaluar integralmente todos los elementos disponibles.";
+
+  const poiImagesMarkdown =
+    poiImages.length > 0
+      ? poiImages
+          .map(
+            (p, idx) =>
+              `![POI ${idx + 1} - ${p.name} (${p.category})](${p.streetViewUrl})`
+          )
+          .join("\n")
+      : "[No se proporcionaron imágenes externas de POIs para este caso.]";
+
   const prompt = `
 DATOS DEL INVESTIGADOR:
 ${comentariosInvestigador}
@@ -299,6 +318,18 @@ ${incidenciaArchivosTexto || "No se encontraron delitos adicionales en los archi
 
 CONTEXTO VISUAL HISTÓRICO (Street View):
 ${streetViewTexto}
+
+OBJETIVOS PRIORITARIOS MARCADOS POR EL ANALISTA:
+${focusAreasTexto}
+
+DIRECTIVA DE EVIDENCIA VISUAL MARKDOWN:
+Se te ha proporcionado una lista de puntos de interés (POIs) cercanos junto con URLs de imágenes de Street View/Places. 
+TIENES LA OBLIGACIÓN de incrustar estas imágenes dentro de tu dictamen usando la sintaxis Markdown:
+![Descripción del Lugar](URL_PROPORCIONADA).
+Cada vez que menciones un atractor o zona de riesgo clave detectado en los datos, ilustra tu punto pegando la imagen correspondiente debajo del párrafo.
+
+Listado de imágenes disponibles (formato Markdown):
+${poiImagesMarkdown}
 
 INSTRUCCIÓN FINAL:
 Basa tu redacción, terminología y análisis ESTRICTAMENTE en la bibliografía y manuales institucionales proporcionados en el System Instruction. 
@@ -482,6 +513,7 @@ export async function POST(req: Request) {
           }))
         : [];
       const mergedPois = mergeAndDeduplicatePOIs(denuePois, placesPois);
+      let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
       if (mergedPois.length > 0) {
         const resumenPOI = mergedPois
           .slice(0, 50)
@@ -494,6 +526,18 @@ export async function POST(req: Request) {
           (irregularidadesTexto ? "\n\n" : "") +
           "Puntos de interés fusionados (DENUE + Google Places):\n" +
           resumenPOI;
+
+        const mapsKey =
+          process.env.GOOGLE_MAPS_API_KEY ??
+          process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ??
+          null;
+        if (mapsKey) {
+          poiImages = mergedPois.slice(0, 12).map((p) => ({
+            name: p.name,
+            category: p.category,
+            streetViewUrl: `https://maps.googleapis.com/maps/api/streetview?size=640x400&location=${p.lat},${p.lng}&key=${mapsKey}`,
+          }));
+        }
       }
     } catch (e) {
       console.error(
@@ -545,6 +589,8 @@ export async function POST(req: Request) {
       strategySummary,
       analysisContext: body.analysisContext,
       analysisRadius: radiusMeters,
+      focusAreas: body.focusAreas ?? [],
+      poiImages,
     });
 
     const model = getGeminiModel(bibliographyContext);

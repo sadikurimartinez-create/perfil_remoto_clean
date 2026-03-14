@@ -99,6 +99,7 @@ export function PhotoAlbum({
   const [analysisContext, setAnalysisContext] = useState("");
   const [analysisRadius, setAnalysisRadius] = useState(500);
   const [aiSuggestions, setAiSuggestions] = useState("");
+  const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [isRefining, setIsRefining] = useState(false);
 
   const handleGenerarAnalisis = async () => {
@@ -242,6 +243,7 @@ export function PhotoAlbum({
           photos: photosPayload,
           analysisContext,
           analysisRadius,
+          focusAreas,
         }),
       });
 
@@ -385,14 +387,6 @@ export function PhotoAlbum({
       </div>
 
       <div className="pt-2 border-t border-slate-800 space-y-2">
-        <button
-          type="button"
-          onClick={handleGenerarAnalisis}
-          disabled={isAnalyzing || selectedIds.length === 0}
-          className="btn-primary w-full"
-        >
-          {isAnalyzing ? "Generando análisis…" : "Generar Análisis de Selección"}
-        </button>
         {/** Botón principal de IA completa con reloj de arena y estados de texto */}
         <button
           type="button"
@@ -557,6 +551,42 @@ export function PhotoAlbum({
             </h3>
             {selectedIds.length >= 1 && (
               <div className="space-y-2">
+                <div className="space-y-1">
+                  <p className="block text-xs font-medium text-slate-300">
+                    Objetivos prioritarios del análisis
+                  </p>
+                  <div className="grid grid-cols-1 gap-1 text-xs text-slate-200">
+                    {[
+                      "Incidencia Delictiva Histórica",
+                      "Giros Comerciales (Bares, Cantinas, Chatarreras)",
+                      "Escuelas / Entornos Educativos",
+                      "Terrenos Baldíos / Zonas de Abandono",
+                      "Rutas de Escape / Callejones",
+                      "Deficiencia de Servicios Públicos (Iluminación, Pavimentación)",
+                    ].map((label) => (
+                      <label
+                        key={label}
+                        className="flex items-center gap-2 rounded-md bg-slate-900/60 border border-slate-700 px-2 py-1"
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-3 w-3 rounded border-slate-600 bg-slate-900 text-sky-500"
+                          checked={focusAreas.includes(label)}
+                          onChange={(e) => {
+                            setFocusAreas((prev) =>
+                              e.target.checked
+                                ? [...prev, label]
+                                : prev.filter((x) => x !== label)
+                            );
+                          }}
+                        />
+                        <span className="text-[11px] text-slate-200">
+                          {label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
                 <label className="block text-xs font-medium text-slate-300">
                   Hipótesis del investigador (contexto del cruce de ubicaciones)
                 </label>
