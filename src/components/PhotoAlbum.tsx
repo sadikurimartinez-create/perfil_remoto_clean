@@ -68,7 +68,10 @@ function readFileAsBase64(file: File): Promise<string> {
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
   projectId?: string;
-  onSaveAnalysisToCloud?: (content: string) => Promise<void>;
+  onSaveAnalysisToCloud?: (
+    content: string,
+    attachedPhotos?: Array<{ id: string; lat: number | null; lng: number | null; tipo: string }>
+  ) => Promise<void>;
 };
 
 export function PhotoAlbum({
