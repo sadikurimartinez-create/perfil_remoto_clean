@@ -93,11 +93,14 @@ export async function exportToWord(
           new Paragraph({
             children: [
               new ImageRun({
-                data: buf,
-                transformation: {
-                  width: 500,
-                  height: 350,
-                },
+                // cast a any para satisfacer los tipos de docx (imagen raster estándar)
+                ...( {
+                  data: buf,
+                  transformation: {
+                    width: 500,
+                    height: 350,
+                  },
+                } as any),
               }),
             ],
           })
