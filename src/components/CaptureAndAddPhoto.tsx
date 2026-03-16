@@ -10,10 +10,34 @@ import { db } from "@/lib/localDb";
 const COMPRESSION_OPTIONS = {
   maxSizeMB: 0.5,
   maxWidthOrHeight: 1024,
-  useWebWorker: true,
+  useWebWorker: false,
   initialQuality: 0.65,
   alwaysKeepResolution: true,
 } as const;
+
+function getFallbackLocation(): Promise<{ lat: number; lng: number }> {
+  return new Promise((resolve) => {
+    if (typeof navigator?.geolocation?.getCurrentPosition !== "function") {
+      resolve({ lat: 0, lng: 0 });
+      return;
+    }
+    const timeout = setTimeout(() => resolve({ lat: 0, lng: 0 }), 5000);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        clearTimeout(timeout);
+        resolve({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+      },
+      () => {
+        clearTimeout(timeout);
+        resolve({ lat: 0, lng: 0 });
+      },
+      { enableHighAccuracy: false, timeout: 4000, maximumAge: 60000 }
+    );
+  });
+}
 
 export function CaptureAndAddPhoto() {
   const { addPhotoToAlbum, project } = useProject();
@@ -74,11 +98,23 @@ export function CaptureAndAddPhoto() {
           lng = fullExif.longitude as number;
         }
       }
-      if (lat != null && lng != null) setGps({ lat, lng });
-      else setError("No se encontraron coordenadas GPS en la imagen. Active el GPS y vuelva a tomar la foto.");
+      if (lat != null && lng != null) {
+        setGps({ lat, lng });
+        setError(null);
+      } else {
+        const fallback = await getFallbackLocation();
+        setGps(fallback);
+        setError(
+          fallback.lat === 0 && fallback.lng === 0
+            ? "No hay coordenadas en la imagen. Se agregará con ubicación (0, 0). Puede activar GPS/cámara para la próxima."
+            : null
+        );
+      }
     } catch (err) {
       console.error(err);
-      setError("Error al leer coordenadas de la imagen.");
+      const fallback = await getFallbackLocation();
+      setGps(fallback);
+      setError("No se pudieron leer coordenadas. Se usará ubicación por defecto.");
     } finally {
       setIsReading(false);
     }
@@ -181,8 +217,9 @@ export function CaptureAndAddPhoto() {
       }
 
       if (lat == null || lng == null) {
-        console.warn("[CaptureAndAddPhoto] Imagen sin coordenadas GPS, se omite.");
-        continue;
+        const fallback = await getFallbackLocation();
+        lat = fallback.lat;
+        lng = fallback.lng;
       }
 
       const photoId = crypto.randomUUID();
@@ -241,9 +278,15 @@ export function CaptureAndAddPhoto() {
           Captura / Subida de fotografía
         </h3>
         <p className="text-sm text-slate-400">
-          Elija si quiere tomar una foto con la cámara o subirla desde la galería del dispositivo. Solo se aceptan imágenes con GPS.
+          Tome una foto con la cámara o suba desde la galería. Si la imagen no tiene ubicación, se usará su posición actual o (0, 0).
         </p>
       </header>
+
+      {!project && (
+        <p className="text-sm text-amber-400">
+          Cree o abra un proyecto para poder agregar fotos.
+        </p>
+      )}
 
       <input
         ref={fileInputRef}
@@ -266,15 +309,17 @@ export function CaptureAndAddPhoto() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         <button
           type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800"
+          disabled={!project}
+          onClick={() => project && fileInputRef.current?.click()}
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Tomar foto (Cámara)
         </button>
         <button
           type="button"
-          onClick={() => galleryInputRef.current?.click()}
-          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800"
+          disabled={!project}
+          onClick={() => project && galleryInputRef.current?.click()}
+          className="w-full rounded-lg border border-slate-600 bg-slate-900 text-slate-100 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Subir desde galería
         </button>
