@@ -8,10 +8,10 @@ import { TIPOS_IMAGEN } from "@/context/ProjectContext";
 import { db } from "@/lib/localDb";
 
 const COMPRESSION_OPTIONS = {
-  maxSizeMB: 0.8,
-  maxWidthOrHeight: 1280,
+  maxSizeMB: 0.5,
+  maxWidthOrHeight: 1024,
   useWebWorker: true,
-  initialQuality: 0.7,
+  initialQuality: 0.65,
   alwaysKeepResolution: true,
 } as const;
 
@@ -47,11 +47,20 @@ export function CaptureAndAddPhoto() {
     }
     setIsReading(true);
 
+    let compressed: File;
     try {
-      const compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
-      setFile(compressed);
-      setPreviewUrl(URL.createObjectURL(compressed));
+      compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
+    } catch (err) {
+      console.error(err);
+      setError("No se pudo comprimir la imagen. Pruebe con una foto más pequeña o en JPG/PNG.");
+      setIsReading(false);
+      return;
+    }
 
+    setFile(compressed);
+    setPreviewUrl(URL.createObjectURL(compressed));
+
+    try {
       const exifGps = await exifr.gps(compressed).catch(() => null);
       let lat: number | null = null;
       let lng: number | null = null;
@@ -59,17 +68,17 @@ export function CaptureAndAddPhoto() {
         lat = exifGps.latitude;
         lng = exifGps.longitude;
       } else {
-        const fullExif = await exifr.parse(selected, { gps: true }).catch(() => null) as Record<string, unknown> | null;
+        const fullExif = await exifr.parse(compressed, { gps: true }).catch(() => null) as Record<string, unknown> | null;
         if (fullExif?.latitude != null && fullExif?.longitude != null) {
           lat = fullExif.latitude as number;
           lng = fullExif.longitude as number;
         }
       }
       if (lat != null && lng != null) setGps({ lat, lng });
-      else setError("No se encontraron coordenadas GPS en la imagen. Tome la foto con GPS activado.");
+      else setError("No se encontraron coordenadas GPS en la imagen. Active el GPS y vuelva a tomar la foto.");
     } catch (err) {
       console.error(err);
-      setError("Error al leer metadatos EXIF.");
+      setError("Error al leer coordenadas de la imagen.");
     } finally {
       setIsReading(false);
     }
@@ -79,23 +88,9 @@ export function CaptureAndAddPhoto() {
     if (!previewUrl || !gps || !project || !file) return;
 
     const photoId = crypto.randomUUID();
+    const projectId = project.id;
 
-    // Estado en memoria (mismo id que Dexie)
-    addPhotoToAlbum(
-      {
-        previewUrl,
-        lat: gps.lat,
-        lng: gps.lng,
-        tipo,
-        comentario: comentario.trim(),
-        file,
-      },
-      photoId
-    );
-
-    // Persistencia offline en IndexedDB (Dexie)
     try {
-      const projectId = project.id;
       await db.transaction("rw", db.projects, db.photos, async () => {
         const existing = await db.projects.get(projectId);
         if (!existing) {
@@ -117,15 +112,23 @@ export function CaptureAndAddPhoto() {
         });
       });
     } catch (e) {
-      console.error(
-        "[CaptureAndAddPhoto] Error guardando en IndexedDB:",
-        e
-      );
+      console.error("[CaptureAndAddPhoto] Error guardando en IndexedDB:", e);
+      setError("No se pudo guardar en el dispositivo (poca memoria o espacio). Libere espacio e intente de nuevo.");
+      return;
     }
 
-    if (previewUrl && previewUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(previewUrl);
-    }
+    addPhotoToAlbum(
+      {
+        previewUrl,
+        lat: gps.lat,
+        lng: gps.lng,
+        tipo,
+        comentario: comentario.trim(),
+        file,
+      },
+      photoId
+    );
+
     setFile(null);
     setPreviewUrl(null);
     setGps(null);
@@ -143,11 +146,19 @@ export function CaptureAndAddPhoto() {
     setError(null);
 
     for (const selected of files) {
+      let compressed: File;
       try {
-        let lat: number | null = null;
-        let lng: number | null = null;
-        const compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
+        compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
+      } catch (err) {
+        console.error("[CaptureAndAddPhoto] Error comprimiendo:", err);
+        setError("No se pudo comprimir una imagen. Use fotos más pequeñas o en JPG/PNG.");
+        e.target.value = "";
+        return;
+      }
 
+      let lat: number | null = null;
+      let lng: number | null = null;
+      try {
         const exifGps = await exifr.gps(compressed).catch(() => null);
         if (
           exifGps &&
@@ -165,63 +176,59 @@ export function CaptureAndAddPhoto() {
             lng = fullExif.longitude as number;
           }
         }
+      } catch {
+        // ignorar error EXIF; lat/lng siguen null
+      }
 
-        if (lat == null || lng == null) {
-          console.warn(
-            "[CaptureAndAddPhoto] Imagen de galería sin coordenadas GPS, se omite."
-          );
-          continue;
-        }
+      if (lat == null || lng == null) {
+        console.warn("[CaptureAndAddPhoto] Imagen sin coordenadas GPS, se omite.");
+        continue;
+      }
 
-        const photoId = crypto.randomUUID();
-        const projectId = project.id;
-        const preview = URL.createObjectURL(compressed);
+      const photoId = crypto.randomUUID();
+      const projectId = project.id;
+      const preview = URL.createObjectURL(compressed);
 
-        addPhotoToAlbum(
-          {
-            previewUrl: preview,
+      try {
+        await db.transaction("rw", db.projects, db.photos, async () => {
+          const existing = await db.projects.get(projectId);
+          if (!existing) {
+            await db.projects.add({
+              id: projectId,
+              name: project.nombre,
+              createdAt: Date.now(),
+            });
+          }
+          await db.photos.add({
+            id: photoId,
+            projectId,
+            imageBlob: compressed,
+            tag: tipo,
+            comments: comentario.trim(),
             lat,
             lng,
-            tipo,
-            comentario: comentario.trim(),
-            file: compressed,
-          },
-          photoId
-        );
-
-        try {
-          await db.transaction("rw", db.projects, db.photos, async () => {
-            const existing = await db.projects.get(projectId);
-            if (!existing) {
-              await db.projects.add({
-                id: projectId,
-                name: project.nombre,
-                createdAt: Date.now(),
-              });
-            }
-            await db.photos.add({
-              id: photoId,
-              projectId,
-              imageBlob: compressed,
-              tag: tipo,
-              comments: comentario.trim(),
-              lat,
-              lng,
-              timestamp: Date.now(),
-            });
+            timestamp: Date.now(),
           });
-        } catch (err) {
-          console.error(
-            "[CaptureAndAddPhoto] Error guardando imagen de galería en IndexedDB:",
-            err
-          );
-        }
+        });
       } catch (err) {
-        console.error(
-          "[CaptureAndAddPhoto] Error procesando imagen de galería:",
-          err
-        );
+        console.error("[CaptureAndAddPhoto] Error guardando en IndexedDB:", err);
+        if (preview.startsWith("blob:")) URL.revokeObjectURL(preview);
+        setError("No se pudo guardar en el dispositivo (poca memoria o espacio). Libere espacio e intente con menos fotos.");
+        e.target.value = "";
+        return;
       }
+
+      addPhotoToAlbum(
+        {
+          previewUrl: preview,
+          lat,
+          lng,
+          tipo,
+          comentario: comentario.trim(),
+          file: compressed,
+        },
+        photoId
+      );
     }
 
     e.target.value = "";
@@ -241,7 +248,7 @@ export function CaptureAndAddPhoto() {
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg, image/png, image/webp"
+        accept="image/*"
         capture="environment"
         className="hidden"
         onChange={handleFileChange}

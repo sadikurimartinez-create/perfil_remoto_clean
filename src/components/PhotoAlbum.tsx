@@ -101,6 +101,7 @@ export function PhotoAlbum({
   const [aiSuggestions, setAiSuggestions] = useState("");
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [isRefining, setIsRefining] = useState(false);
+  const [isListening, setIsListening] = useState(false);
 
   const handleGenerarAnalisis = async () => {
     if (selectedIds.length === 0) {
@@ -271,6 +272,43 @@ export function PhotoAlbum({
       );
     } finally {
       setIsGeneratingAI(false);
+    }
+  };
+
+  const handleToggleDictation = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError(
+        "Este navegador no soporta dictado por voz. Use la versión de escritorio o Chrome/Android."
+      );
+      return;
+    }
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "es-MX";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onerror = () => setIsListening(false);
+      recognition.onend = () => setIsListening(false);
+      recognition.onresult = (event: any) => {
+        const transcript = event.results?.[0]?.[0]?.transcript as
+          | string
+          | undefined;
+        if (!transcript) return;
+        setAnalysisContext((prev) =>
+          prev ? `${prev.trim()} ${transcript}` : transcript
+        );
+      };
+
+      recognition.start();
+    } catch (e) {
+      console.error("[PhotoAlbum] Error al iniciar reconocimiento de voz:", e);
+      setIsListening(false);
     }
   };
 
@@ -587,9 +625,23 @@ export function PhotoAlbum({
                     ))}
                   </div>
                 </div>
-                <label className="block text-xs font-medium text-slate-300">
-                  Hipótesis del investigador (contexto del cruce de ubicaciones)
-                </label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="block text-xs font-medium text-slate-300">
+                    Hipótesis del investigador (contexto del cruce de ubicaciones)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleToggleDictation}
+                    className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold border ${
+                      isListening
+                        ? "border-red-500 text-red-300 bg-red-900/40"
+                        : "border-slate-600 text-slate-200 bg-slate-900"
+                    }`}
+                  >
+                    <span aria-hidden="true">🎙️</span>
+                    <span>{isListening ? "Escuchando…" : "Dictar contexto"}</span>
+                  </button>
+                </div>
                 <textarea
                   value={analysisContext}
                   onChange={(e) => setAnalysisContext(e.target.value)}

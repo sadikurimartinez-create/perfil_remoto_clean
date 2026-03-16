@@ -2,21 +2,25 @@ import { Document, ImageRun, Packer, Paragraph, TextRun } from "docx";
 import { saveAs } from "file-saver";
 
 async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
-  // 1. Forzar descarga vía fetch con CORS
-  const response = await fetch(imageUrl, { mode: "cors" });
-  if (!response.ok) {
-    throw new Error(`No se pudo descargar la imagen (${response.status})`);
-  }
-  const blob = await response.blob();
-
-  // 2. Crear URL temporal local
-  const objectUrl = URL.createObjectURL(blob);
-
+  let objectUrl: string | null = null;
   try {
-    // 3. Cargar la imagen de forma segura
+    let imgSrc = imageUrl;
+
+    // Si es una URL HTTP/HTTPS, descargar vía fetch para evitar CORS/taint
+    if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+      const response = await fetch(imageUrl, { mode: "cors" });
+      if (!response.ok) {
+        throw new Error(`No se pudo descargar la imagen (${response.status})`);
+      }
+      const blob = await response.blob();
+      objectUrl = URL.createObjectURL(blob);
+      imgSrc = objectUrl;
+    }
+
+    // 3. Cargar la imagen de forma segura (sirve tanto para blob: como para objectUrl http descargada)
     const img = new Image();
     img.crossOrigin = "Anonymous";
-    img.src = objectUrl;
+    img.src = imgSrc;
 
     await new Promise<void>((resolve, reject) => {
       img.onload = () => resolve();
@@ -65,8 +69,10 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
 
     return stampedBuffer;
   } finally {
-    // Liberar memoria del URL temporal
-    URL.revokeObjectURL(objectUrl);
+    // Liberar memoria del URL temporal si se creó
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+    }
   }
 }
 
