@@ -226,8 +226,6 @@ export default function ProjectWorkspacePage() {
                         a.content,
                         project.nombre || "Expediente_sin_nombre",
                         (a.attachedPhotos || [])
-                          .map((p) => album.find((ph) => ph.id === p.id)?.previewUrl)
-                          .filter((u): u is string => typeof u === "string")
                       )
                     }
                     className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
@@ -258,30 +256,26 @@ export default function ProjectWorkspacePage() {
                       Anexo Fotográfico
                     </h4>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      {a.attachedPhotos.map((p) => {
-                        const photo = album.find((ph) => ph.id === p.id);
-                        if (!photo?.previewUrl) return null;
-                        return (
-                          <div
-                            key={p.id}
-                            className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video bg-black"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={photo.previewUrl}
-                              alt={p.tipo}
-                              className="object-cover w-full h-full"
-                            />
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-white/30 font-black text-2xl tracking-widest -rotate-45 select-none text-center leading-tight drop-shadow">
-                                SSP AGS
-                                <br />
-                                CEIPOL
-                              </span>
-                            </div>
+                      {a.attachedPhotos.map((url, idx) => (
+                        <div
+                          key={idx}
+                          className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video bg-black"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={url}
+                            alt={`Foto ${idx + 1} del expediente`}
+                            className="object-cover w-full h-full"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="text-white/30 font-black text-2xl tracking-widest -rotate-45 select-none text-center leading-tight drop-shadow">
+                              SSP AGS
+                              <br />
+                              CEIPOL
+                            </span>
                           </div>
-                        );
-                      })}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
