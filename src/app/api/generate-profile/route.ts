@@ -304,6 +304,7 @@ function buildPromptForGemini(params: {
   analysisRadius: number;
   focusAreas: string[];
   poiImages: Array<{ name: string; category: string; streetViewUrl: string }>;
+  visionDataTactica?: { texto: string; rostros: number };
 }): string {
   const {
     photos,
@@ -318,6 +319,7 @@ function buildPromptForGemini(params: {
     analysisRadius,
     focusAreas,
     poiImages,
+    visionDataTactica,
   } = params;
 
   const comentariosInvestigador = photos
@@ -383,6 +385,10 @@ function buildPromptForGemini(params: {
     analysisContext?.trim() ||
     "[El analista no proporcionó hipótesis ni contexto adicional.]";
 
+  const visionTacticaTexto = visionDataTactica
+    ? `Inteligencia Visual Automatizada: en las fotografías de la escena se ha detectado mediante OCR el siguiente texto (evalúa si corresponden a placas vehiculares o números económicos de taxis/patrullas): "${visionDataTactica.texto}". Además, se detectó la presencia de ${visionDataTactica.rostros} rostro(s). Cruza esta información con los Puntos de Interés (POIs) y la incidencia delictiva. Analiza si la presencia de estos vehículos o individuos coincide con tácticas de 'halconeo', transporte pirata o vigilancia en la zona.`
+    : "Inteligencia Visual Automatizada: no se detectó texto relevante ni rostros significativos en las imágenes procesadas.";
+
   const prompt = `
 ## DATOS DEL INVESTIGADOR (fotos y comentarios)
 ${comentariosInvestigador}
@@ -411,6 +417,9 @@ ${incidenciaArchivosTexto || "No se encontraron delitos adicionales en archivos 
 
 ## CONTEXTO VISUAL (Street View)
 ${streetViewTexto}
+
+## INTELIGENCIA VISUAL AUTOMATIZADA (OCR y Rostros)
+${visionTacticaTexto}
 
 ## OBJETIVOS PRIORITARIOS MARCADOS POR EL ANALISTA
 ${focusAreasTexto}
@@ -693,6 +702,7 @@ export async function POST(req: Request) {
       analysisRadius: radiusMeters,
       focusAreas: body.focusAreas ?? [],
       poiImages,
+      visionDataTactica: body.visionDataTactica ?? undefined,
     });
 
     const model = getGeminiModel(bibliographyContext);
@@ -729,12 +739,16 @@ export async function POST(req: Request) {
       },
       { status: 200 }
     );
-  } catch (error) {
-    console.error("[api/generate-profile] Error inesperado:", error);
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Error interno al generar el perfil criminológico.";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+    } catch (error: any) {
+      console.error("[api/generate-profile] Error inesperado:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error interno al generar el perfil criminológico.";
+      const status =
+        typeof error?.status === "number" && error.status >= 400 && error.status < 600
+          ? error.status
+          : 500;
+      return NextResponse.json({ error: message }, { status });
+    }
 }

@@ -7,6 +7,7 @@ import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
 import { CrimeCharts } from "./CrimeCharts";
 import { exportToWord } from "@/lib/exportToWord";
+import { getStorageInstance } from "@/lib/firebase";
 
 /** Redimensiona y comprime la imagen para que el payload quede bajo el límite de Vercel (~4.5 MB). */
 async function resizeImageToBase64(file: File, maxSize = 640, quality = 0.5): Promise<string> {
@@ -73,7 +74,7 @@ type PhotoAlbumProps = {
   projectId?: string;
   onSaveAnalysisToCloud?: (
     content: string,
-    attachedPhotos?: Array<{ id: string; lat: number | null; lng: number | null; tipo: string }>
+    attachedPhotos?: string[]
   ) => Promise<void>;
   /** Vista Centro de Comando: columna derecha para mapa y gráficas (portal). */
   splitLayout?: boolean;
@@ -122,6 +123,40 @@ export function PhotoAlbum({
   const [showPreliminaryMap, setShowPreliminaryMap] = useState(false);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
+  const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
+
+  const uploadSelectedPhotosToStorage = async (
+    projectId: string,
+    selectedPhotoIds: string[]
+  ): Promise<string[]> => {
+    const storage = getStorageInstance();
+    const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+    const selected = album.filter((p) => selectedPhotoIds.includes(p.id));
+    const uploads = selected.map(async (photo) => {
+      try {
+        let blob: Blob | null = null;
+        if (photo.file instanceof Blob) {
+          blob = photo.file;
+        } else if (photo.previewUrl && photo.previewUrl.startsWith("http")) {
+          const resp = await fetch(photo.previewUrl);
+          if (resp.ok) {
+            blob = await resp.blob();
+          }
+        }
+        if (!blob) return null;
+        const path = `projects/${projectId}/${photo.id}-${Date.now()}`;
+        const storageRef = ref(storage, path);
+        await uploadBytes(storageRef, blob);
+        const url = await getDownloadURL(storageRef);
+        return url;
+      } catch (err) {
+        console.error("[PhotoAlbum] Error subiendo foto a Storage:", err);
+        return null;
+      }
+    });
+    const results = await Promise.all(uploads);
+    return results.filter((u): u is string => typeof u === "string" && u.length > 0);
+  };
 
   const handleGenerarAnalisis = async () => {
     if (selectedIds.length === 0) {
@@ -196,15 +231,11 @@ export function PhotoAlbum({
     setError(null);
     try {
       if (onSaveAnalysisToCloud) {
-        const attachedPhotos = album
-          .filter((p) => selectedIds.includes(p.id))
-          .map((p) => ({
-            id: p.id,
-            lat: p.lat,
-            lng: p.lng,
-            tipo: p.tipo,
-          }));
-        await onSaveAnalysisToCloud(editableProfile, attachedPhotos);
+        const photoUrls = await uploadSelectedPhotosToStorage(
+          projectId,
+          selectedIds
+        );
+        await onSaveAnalysisToCloud(editableProfile, photoUrls);
         setHasSavedAnalysis(true);
       }
     } catch (err) {
@@ -272,43 +303,54 @@ export function PhotoAlbum({
         setAnalysisResult(mapData);
       }
 
-      const res = await fetch("/api/generate-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          photos: photosPayload,
-          analysisContext,
-          analysisRadius,
-          focusAreas,
-        }),
-      });
+      try {
+        const res = await fetch("/api/generate-profile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            photos: photosPayload,
+            analysisContext,
+            analysisRadius,
+            focusAreas,
+          }),
+        });
 
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        let msg = text || "Error al generar el perfil de IA";
-        try {
-          const json = JSON.parse(text) as { error?: string };
-          if (json.error) msg = json.error;
-        } catch {
-          /* usar text tal cual */
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          let msg = text || "Error al generar el perfil de IA";
+          try {
+            const json = JSON.parse(text) as { error?: string };
+            if (json.error) msg = json.error;
+          } catch {
+            /* usar text tal cual */
+          }
+          throw new Error(msg);
         }
-        throw new Error(msg);
+
+        const data = (await res.json()) as {
+          markdown: string;
+          meta?: { riskLevel?: "bajo" | "medio" | "alto" };
+        };
+        const markdown = data.markdown ?? "";
+        setAiProfile(markdown);
+        setEditableProfile(markdown);
+        setProfileRiskLevel(data.meta?.riskLevel ?? null);
+      } catch (err) {
+        console.error(err);
+        const rawMessage =
+          err instanceof Error ? err.message : "Error al generar el perfil criminológico con IA.";
+        const lower = rawMessage.toLowerCase();
+        const isQuotaError =
+          lower.includes("429") ||
+          lower.includes("too many requests") ||
+          lower.includes("quota");
+
+        setError(
+          isQuotaError
+            ? "Saturación de red en la IA. Por favor, espere 40 segundos e intente de nuevo."
+            : "Error de comunicación con el Cuartel General. Reintente."
+        );
       }
-      const data = (await res.json()) as {
-        markdown: string;
-        meta?: { riskLevel?: "bajo" | "medio" | "alto" };
-      };
-      const markdown = data.markdown ?? "";
-      setAiProfile(markdown);
-      setEditableProfile(markdown);
-      setProfileRiskLevel(data.meta?.riskLevel ?? null);
-    } catch (err) {
-      console.error(err);
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Error al generar el perfil criminológico con IA."
-      );
     } finally {
       setIsGeneratingAI(false);
     }
@@ -330,29 +372,55 @@ export function PhotoAlbum({
       if (!recognitionRef.current) {
         const recognition = new SpeechRecognition();
         recognition.lang = "es-MX";
-        recognition.interimResults = false;
+        recognition.continuous = true;
+        recognition.interimResults = true;
         recognition.maxAlternatives = 1;
-        (recognition as any).continuous = false;
 
         recognition.onstart = () => setIsListening(true);
         recognition.onerror = (event: any) => {
           console.error("Error en micrófono:", event?.error);
           setIsListening(false);
         };
-        recognition.onend = () => setIsListening(false);
+        recognition.onend = () => {
+          // Si el usuario sigue con la intención de dictar, reiniciamos el micrófono
+          if (isListening) {
+            try {
+              recognition.start();
+            } catch (e) {
+              console.error("Error reiniciando micrófono:", e);
+              setIsListening(false);
+            }
+          } else {
+            setIsListening(false);
+          }
+        };
         recognition.onresult = (event: any) => {
-          const transcript = event.results?.[0]?.[0]?.transcript?.trim() as
-            | string
-            | undefined;
-          if (!transcript) return;
+          let interimTranscript = "";
+          let finalTranscript = "";
 
-          // Evitar repetir exactamente la misma frase varias veces
-          if (transcript === lastTranscriptRef.current) return;
-          lastTranscriptRef.current = transcript;
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const res = event.results[i];
+            const text = (res[0]?.transcript as string | undefined)?.trim();
+            if (!text) continue;
+            if (res.isFinal) {
+              finalTranscript += text + " ";
+            } else {
+              interimTranscript += text + " ";
+            }
+          }
 
-          setAnalysisContext((prev) =>
-            prev ? `${prev.trim()} ${transcript}` : transcript
-          );
+          if (finalTranscript) {
+            const normalized = finalTranscript.trim();
+            if (!normalized) return;
+            // Evitar repetir exactamente la misma frase varias veces
+            if (normalized === lastTranscriptRef.current) return;
+            lastTranscriptRef.current = normalized;
+
+            setAnalysisContext((prev) =>
+              prev ? `${prev.trim()} ${normalized}` : normalized
+            );
+          }
+          // El interimTranscript se puede usar para mostrar texto en vivo si se desea.
         };
 
         recognitionRef.current = recognition;
@@ -517,7 +585,31 @@ export function PhotoAlbum({
                 <input
                   type="checkbox"
                   checked={selectedIds.includes(p.id)}
-                  onChange={() => togglePhotoSelection(p.id)}
+                  onChange={async () => {
+                    togglePhotoSelection(p.id);
+                    if (!visionData[p.id] && p.file instanceof Blob) {
+                      try {
+                        const base64 = await readFileAsBase64(p.file);
+                        const res = await fetch("/api/analyze-vision", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ imageBase64: base64 }),
+                        });
+                        if (res.ok) {
+                          const data = (await res.json()) as {
+                            faces: { count: number; headwear: boolean };
+                            extractedText: string;
+                          };
+                          setVisionData((prev) => ({
+                            ...prev,
+                            [p.id]: data,
+                          }));
+                        }
+                      } catch (err) {
+                        console.error("[PhotoAlbum] Error en analyze-vision:", err);
+                      }
+                    }
+                  }}
                   className="mt-1 rounded border-slate-600"
                 />
                 <div className="flex-1 min-w-0 relative">
@@ -550,6 +642,19 @@ export function PhotoAlbum({
                   )}
                   <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5">{p.tipo}</p>
                   <p className="text-[10px] text-slate-500 truncate">{p.comentario || "—"}</p>
+                  {visionData[p.id]?.extractedText && (
+                    <span className="mt-0.5 inline-flex items-center gap-1 bg-blue-900/80 text-blue-200 text-[10px] px-2 py-0.5 rounded border border-blue-700">
+                      🏷️ OCR:{" "}
+                      <span className="truncate max-w-[7rem]">
+                        {visionData[p.id].extractedText}
+                      </span>
+                    </span>
+                  )}
+                  {visionData[p.id]?.faces?.count > 0 && (
+                    <span className="mt-0.5 inline-flex items-center gap-1 bg-red-900/80 text-red-200 text-[10px] px-2 py-0.5 rounded border border-red-700">
+                      👤 Rostros: {visionData[p.id].faces.count}
+                    </span>
+                  )}
                   <p className="text-[9px] font-mono tracking-tight text-blue-300">
                     {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
                       ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`
@@ -588,14 +693,22 @@ export function PhotoAlbum({
               type="button"
               onClick={handleGenerateAIProfile}
               disabled={isGeneratingAI || selectedIds.length === 0}
-              className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isGeneratingAI ? (
                 <>
-                  <svg className="mr-2 h-4 w-4 animate-spin text-slate-100" viewBox="0 0 24 24" aria-hidden="true">
-                    <path className="opacity-25" fill="currentColor" d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z" />
+                  <svg
+                    className="mr-2 h-4 w-4 animate-spin text-slate-100"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      className="opacity-25"
+                      fill="currentColor"
+                      d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
+                    />
                   </svg>
-                  Procesando…
+                  Procesando inteligencia... Por favor espere
                 </>
               ) : aiProfile ? (
                 "Análisis Generado"

@@ -26,12 +26,8 @@ type CloudAnalysis = {
   content: string;
   createdAt: number;
   createdBy?: string;
-  attachedPhotos?: Array<{
-    id: string;
-    lat: number | null;
-    lng: number | null;
-    tipo: string;
-  }>;
+  /** URLs públicas de las fotografías asociadas a este análisis. */
+  attachedPhotos?: string[];
 };
 
 export default function ProjectWorkspacePage() {
@@ -44,6 +40,7 @@ export default function ProjectWorkspacePage() {
   const { user, loading: loadingAuth } = useAuth();
 
   const [analyses, setAnalyses] = useState<CloudAnalysis[]>([]);
+  const [previewAnalysis, setPreviewAnalysis] = useState<CloudAnalysis | null>(null);
 
   useEffect(() => {
     if (!projectId) return;
@@ -239,6 +236,13 @@ export default function ProjectWorkspacePage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setPreviewAnalysis(a)}
+                    className="inline-flex items-center gap-1 rounded-md bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-sm hover:bg-slate-600 transition-colors"
+                  >
+                    Vista previa
+                  </button>
+                  <button
+                    type="button"
                     onClick={async () => {
                       const db = getDb();
                       await deleteDoc(doc(db, "analyses", a.id));
@@ -298,6 +302,48 @@ export default function ProjectWorkspacePage() {
           <circle cx="12" cy="10" r="3" />
         </svg>
       </a>
+      {previewAnalysis && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-6 md:p-8 max-h-[90vh] overflow-y-auto relative">
+            <button
+              type="button"
+              onClick={() => setPreviewAnalysis(null)}
+              className="absolute top-3 right-3 inline-flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-slate-200 h-8 w-8 text-sm"
+              aria-label="Cerrar vista previa"
+            >
+              ✕
+            </button>
+            <h3 className="text-lg font-bold text-slate-100 mb-4">
+              Vista previa del dictamen
+            </h3>
+            <div className="prose prose-invert prose-sm max-w-none text-slate-100 whitespace-pre-wrap">
+              {previewAnalysis.content}
+            </div>
+            {previewAnalysis.attachedPhotos && previewAnalysis.attachedPhotos.length > 0 && (
+              <div className="mt-6">
+                <h4 className="text-sm font-semibold text-slate-200 mb-2">
+                  Anexo fotográfico
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {previewAnalysis.attachedPhotos.map((url, idx) => (
+                    <div
+                      key={idx}
+                      className="relative rounded-lg overflow-hidden border border-slate-700 aspect-video bg-black"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`Foto ${idx + 1} del expediente`}
+                        className="object-cover w-full h-full"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

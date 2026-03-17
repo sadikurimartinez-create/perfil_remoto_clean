@@ -130,11 +130,39 @@ export async function exportToWord(
   ];
 
   if (attachedPhotos && attachedPhotos.length > 0) {
-    const imagesBuffers: ArrayBuffer[] = [];
+    const imageRuns: ImageRun[] = [];
+    const WORD_MAX_WIDTH = 500;
     for (const url of attachedPhotos) {
       try {
-        const stamped = await applyWatermarkForWord(url);
-        imagesBuffers.push(stamped);
+        const stampedBuffer = await applyWatermarkForWord(url);
+        // Reconstruir un objeto Image para conocer el aspect ratio
+        const img = new Image();
+        img.src = url;
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve();
+          img.onerror = () =>
+            reject(
+              new Error(
+                "[exportToWord] No se pudo calcular dimensiones originales de la imagen"
+              )
+            );
+        });
+        const originalWidth = img.width || img.naturalWidth || WORD_MAX_WIDTH;
+        const originalHeight = img.height || img.naturalHeight || WORD_MAX_WIDTH;
+        const ratio = originalHeight / originalWidth || 1;
+        const proportionalHeight = Math.floor(WORD_MAX_WIDTH * ratio);
+
+        imageRuns.push(
+          new ImageRun({
+            ...({
+              data: stampedBuffer,
+              transformation: {
+                width: WORD_MAX_WIDTH,
+                height: proportionalHeight,
+              },
+            } as any),
+          })
+        );
       } catch (err) {
         console.warn(
           "[exportToWord] No se pudo procesar una imagen para el anexo fotográfico:",
@@ -145,22 +173,11 @@ export async function exportToWord(
       }
     }
 
-    if (imagesBuffers.length > 0) {
-      const imageParagraphs = imagesBuffers.map(
-        (buf) =>
+    if (imageRuns.length > 0) {
+      const imageParagraphs = imageRuns.map(
+        (run) =>
           new Paragraph({
-            children: [
-              new ImageRun({
-                // cast a any para satisfacer los tipos de docx (imagen raster estándar)
-                ...( {
-                  data: buf,
-                  transformation: {
-                    width: 500,
-                    height: 350,
-                  },
-                } as any),
-              }),
-            ],
+            children: [run],
           })
       );
 
@@ -183,6 +200,25 @@ export async function exportToWord(
 
   if (mapImageDataUrl && mapImageDataUrl.startsWith("data:image")) {
     try {
+      // Crear imagen temporal para respetar proporción del mapa
+      const tmpImg = new Image();
+      tmpImg.src = mapImageDataUrl;
+      await new Promise<void>((resolve, reject) => {
+        tmpImg.onload = () => resolve();
+        tmpImg.onerror = () =>
+          reject(
+            new Error(
+              "[exportToWord] No se pudieron leer dimensiones del mapa para Word"
+            )
+          );
+      });
+      const MAP_MAX_WIDTH = 600;
+      const originalWidth = tmpImg.width || tmpImg.naturalWidth || MAP_MAX_WIDTH;
+      const originalHeight =
+        tmpImg.height || tmpImg.naturalHeight || MAP_MAX_WIDTH;
+      const ratio = originalHeight / originalWidth || 1;
+      const proportionalHeight = Math.floor(MAP_MAX_WIDTH * ratio);
+
       const mapBuffer = dataUrlToArrayBuffer(mapImageDataUrl);
       sections.push({
         children: [
@@ -200,7 +236,10 @@ export async function exportToWord(
               new ImageRun({
                 ...({
                   data: mapBuffer,
-                  transformation: { width: 600, height: 400 },
+                  transformation: {
+                    width: MAP_MAX_WIDTH,
+                    height: proportionalHeight,
+                  },
                 } as any),
               }),
             ],
