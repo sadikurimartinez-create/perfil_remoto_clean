@@ -115,6 +115,11 @@ type GenerateProfileBody = {
   analysisContext?: string;
   analysisRadius?: number;
   focusAreas?: string[];
+  /** Inteligencia visual táctica opcional enviada desde el frontend (OCR y rostros). */
+  visionDataTactica?: {
+    texto: string;
+    rostros: number;
+  };
 };
 
 type GeocodingResult = {
@@ -702,7 +707,7 @@ export async function POST(req: Request) {
       analysisRadius: radiusMeters,
       focusAreas: body.focusAreas ?? [],
       poiImages,
-      visionDataTactica: body.visionDataTactica ?? undefined,
+      visionDataTactica: (body as any).visionDataTactica ?? undefined,
     });
 
     const model = getGeminiModel(bibliographyContext);
