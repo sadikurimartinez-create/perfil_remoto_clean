@@ -74,7 +74,6 @@ export default function ConexionesPage() {
         return;
       }
       try {
-        // @ts-expect-error tipos TS no incluyen todos los permisos
         const status = await (navigator.permissions as any).query({ name });
         const state = status.state as PermissionState;
         if (state === "granted") {
@@ -103,14 +102,11 @@ export default function ConexionesPage() {
     };
 
     // GPS
-    // @ts-expect-error 'geolocation' no está tipado en PermissionName
-    void checkPermission("geolocation", "geolocation");
+    void checkPermission("geolocation" as PermissionName, "geolocation");
     // Cámara
-    // @ts-expect-error 'camera' no está tipado en PermissionName
-    void checkPermission("camera", "camera");
+    void checkPermission("camera" as PermissionName, "camera");
     // Micrófono
-    // @ts-expect-error 'microphone' no está tipado en PermissionName
-    void checkPermission("microphone", "microphone");
+    void checkPermission("microphone" as PermissionName, "microphone");
 
     // Firebase (app + auth)
     try {
