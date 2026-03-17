@@ -19,6 +19,7 @@ type PhotoPayload = {
 
 type RequestBody = {
   photos: PhotoPayload[];
+  analysisRadius?: number;
 };
 
 export async function POST(req: Request) {
@@ -47,7 +48,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const radiusMeters = 500;
+    const radiusMeters =
+      typeof body.analysisRadius === "number" && body.analysisRadius > 0
+        ? body.analysisRadius
+        : 500;
     const centerLat =
       photosWithCoords.reduce((a, p) => a + (p.lat as number), 0) /
       photosWithCoords.length;

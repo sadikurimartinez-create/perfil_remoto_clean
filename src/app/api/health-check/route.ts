@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GEMINI_MODEL } from "@/lib/geminiEnv";
 import { searchPlacesAround } from "@/lib/googlePlaces";
 import { searchDenueAround } from "@/lib/denueInegi";
 import { getPool } from "@/lib/db";
@@ -163,7 +164,7 @@ export async function GET() {
     } else {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
         const result = await model.generateContent("ping");
         await result.response;
         services.push({

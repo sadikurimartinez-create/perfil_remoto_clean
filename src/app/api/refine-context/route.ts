@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { GEMINI_API_KEY as GEMINI_KEY } from "@/lib/geminiEnv";
+import { GEMINI_API_KEY as GEMINI_KEY, GEMINI_MODEL } from "@/lib/geminiEnv";
 function getGeminiKey(): string {
   const fromModule = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
   const fromProcess =
@@ -63,7 +63,7 @@ Responde en español, en forma de viñetas cortas, sin repetir el contexto origi
     }
 
     const genAI = new GoogleGenerativeAI(apiKey.trim());
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
     const result = await model.generateContent(prompt);
     const text = result.response.text();
 

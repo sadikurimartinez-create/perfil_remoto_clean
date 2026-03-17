@@ -11,7 +11,7 @@ import { getPool } from "@/lib/db";
 import { buildStrategiesSummaryForTags } from "@/lib/tagStrategies";
 import { getNearbyCrimes } from "@/lib/crimeData";
 import { mergeAndDeduplicatePOIs, type PointOfInterest } from "@/lib/poiDedup";
-import { GEMINI_API_KEY as GEMINI_KEY } from "@/lib/geminiEnv";
+import { GEMINI_API_KEY as GEMINI_KEY, GEMINI_MODEL } from "@/lib/geminiEnv";
 
 export const runtime = "nodejs";
 
@@ -28,6 +28,86 @@ type PhotoInput = {
 function formatCoord(n: number | null | undefined): string {
   if (n == null || typeof n !== "number" || Number.isNaN(n)) return "N/A";
   return n.toFixed(5);
+}
+
+/** Tipos de delito que se consideran de mayor peso para el semáforo de riesgo */
+const DELITOS_PESO_ALTO = [
+  "homicidio",
+  "secuestro",
+  "violencia",
+  "lesiones",
+  "robo",
+  "asalto",
+  "agresión",
+  "amenaza",
+  "narco",
+  "arma",
+  "extorsión",
+  "feminicidio",
+];
+
+function normalizeTipo(tipo: string): string {
+  return tipo.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").trim();
+}
+
+/**
+ * Calcula el nivel de riesgo (semáforo) con reglas afinadas:
+ * - Incidencia estadística (DB) y archivos CSV
+ * - Peso por tipo de delito (graves suman más)
+ * - Comercios irregulares y densidad de POIs como atractores de riesgo
+ */
+function computeRiskLevel(params: {
+  totalIncidenciaDB: number;
+  totalIncidenciaCSV: number;
+  porDelito: Array<{ tipo: string; cantidad: number }>;
+  numIrregulares: number;
+  numPois: number;
+  radioMetros: number;
+}): "bajo" | "medio" | "alto" {
+  const {
+    totalIncidenciaDB,
+    totalIncidenciaCSV,
+    porDelito,
+    numIrregulares,
+    numPois,
+    radioMetros,
+  } = params;
+
+  let puntos = 0;
+
+  const totalIncidencia = totalIncidenciaDB + totalIncidenciaCSV;
+
+  if (totalIncidencia === 0) {
+    puntos = 0;
+  } else {
+    const porMilMetros = radioMetros <= 0 ? 0 : totalIncidencia / (radioMetros / 1000);
+    if (porMilMetros >= 15) puntos += 3;
+    else if (porMilMetros >= 6) puntos += 2;
+    else if (porMilMetros >= 1) puntos += 1;
+  }
+
+  const hayDelitosGraves = porDelito.some((d) =>
+    DELITOS_PESO_ALTO.some((kw) => normalizeTipo(d.tipo).includes(kw))
+  );
+  const cantidadDelitosGraves = porDelito
+    .filter((d) =>
+      DELITOS_PESO_ALTO.some((kw) => normalizeTipo(d.tipo).includes(kw))
+    )
+    .reduce((acc, d) => acc + d.cantidad, 0);
+  if (cantidadDelitosGraves >= 5) puntos += 2;
+  else if (cantidadDelitosGraves >= 1 || hayDelitosGraves) puntos += 1;
+
+  if (numIrregulares >= 5) puntos += 2;
+  else if (numIrregulares >= 1) puntos += 1;
+
+  if (numPois >= 15) puntos += 2;
+  else if (numPois >= 8) puntos += 1;
+
+  const puntuacion = Math.round(puntos);
+
+  if (puntuacion <= 1) return "bajo";
+  if (puntuacion <= 3) return "medio";
+  return "alto";
 }
 
 type GenerateProfileBody = {
@@ -90,13 +170,13 @@ function getGeminiModel(bibliographyContext: string) {
   }
   const genAI = new GoogleGenerativeAI(apiKey);
   return genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    model: GEMINI_MODEL,
     systemInstruction:
-      "Eres un Criminólogo experto en Ecología Ambiental adscrito al Centro de Estudios y Política Criminal. " +
-      "Tu tarea es redactar un 'Perfil Criminológico Ambiental' basado en 4 teorías: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Ventanas Rotas. " +
-      "Tu lenguaje debe ser técnico, policial y objetivo.\n\n" +
-      "Basa tu redacción, terminología y análisis ESTRICTAMENTE en la siguiente bibliografía y manuales de aplicación institucional. " +
-      "No inventes teorías que no estén explícitamente presentes en dichos documentos.\n\n" +
+      "Eres un Criminólogo experto en Ecología Ambiental adscrito al Centro de Estudios y Política Criminal (CEIPOL). " +
+      "Redactas dictámenes técnicos denominados 'Perfil Criminológico Ambiental', con lenguaje policial, objetivo y sin juicios de valor no sustentados en datos. " +
+      "Fundamentas el análisis en cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
+      "Basa terminología y argumentos ESTRICTAMENTE en la bibliografía y manuales institucionales proporcionados; no inventes teorías ni citas que no figuren en ellos.\n\n" +
+      "Reglas de redacción: (1) Usa párrafos breves y encabezados claros. (2) Evita repeticiones; cada idea en un solo lugar. (3) Distingue hechos observados o datos (geocoding, incidencia, POIs) de interpretación criminológica. (4) Las recomendaciones deben ser accionables y vinculadas al análisis. (5) El apartado final INFORMACIÓN PREDICTIVA debe cuantificar o calificar el riesgo a 6 meses y justificarlo con los elementos del perfil.\n\n" +
       (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
   });
 }
@@ -265,10 +345,14 @@ function buildPromptForGemini(params: {
       ? `Colonia ${geocoding.colonia} (dirección aproximada no disponible)`
       : "Dirección no disponible (solo coordenadas GPS).");
 
+  const radioTexto =
+    analysisRadius >= 1000
+      ? `${(analysisRadius / 1000).toFixed(1)} km`
+      : `${analysisRadius} m`;
   const incidenciaTexto =
     incidencia.total === 0
-      ? "En un radio de 500 metros no se registran incidentes históricos en la base de incidencia."
-      : `En un radio de 500 metros se registran ${incidencia.total} incidentes históricos. ` +
+      ? `En un radio de ${radioTexto} no se registran incidentes históricos en la base de incidencia.`
+      : `En un radio de ${radioTexto} se registran ${incidencia.total} incidentes históricos. ` +
         `Por tipo: ${incidencia.porDelito
           .map((d) => `${d.cantidad} × ${d.tipo}`)
           .join(", ")}. ` +
@@ -295,50 +379,61 @@ function buildPromptForGemini(params: {
           .join("\n")
       : "[No se proporcionaron imágenes externas de POIs para este caso.]";
 
+  const hipotesisTexto =
+    analysisContext?.trim() ||
+    "[El analista no proporcionó hipótesis ni contexto adicional.]";
+
   const prompt = `
-DATOS DEL INVESTIGADOR:
+## DATOS DEL INVESTIGADOR (fotos y comentarios)
 ${comentariosInvestigador}
 
-DIRECCIÓN (Geocoding):
-${direccionTexto}
+## HIPÓTESIS O CONTEXTO DEL ANALISTA (incorporar en el análisis)
+${hipotesisTexto}
 
-DETERIORO URBANO (Vision API - Ventanas Rotas):
+## UBICACIÓN (Geocoding)
+${direccionTexto}
+Radio de análisis utilizado: ${analysisRadius} metros.
+
+## DETERIORO URBANO (Vision API - Ventanas Rotas)
 ${visionResumen}
 
-CONTROLES Y ATRACTORES (Places + DENUE - Comercios irregulares y puntos de interés):
+## CONTROLES Y ATRACTORES (Places + DENUE)
 ${irregularidadesTexto || "No se identificaron comercios irregulares ni atractores relevantes en la zona analizada."}
 
-ESTRATEGIA ANALÍTICA SEGÚN TIPO DE PUNTO:
-${strategySummary || "No se especificó etiqueta del catálogo; aplicar análisis general conforme a las cuatro teorías indicadas."}
+## ESTRATEGIA ANALÍTICA SEGÚN TIPO DE PUNTO
+${strategySummary || "Aplicar análisis general conforme a las cuatro teorías indicadas."}
 
-INCIDENCIA ESTADÍSTICA (PostGIS / CSV):
+## INCIDENCIA ESTADÍSTICA (base PostGIS/CSV)
 ${incidenciaTexto}
 
-INCIDENCIA HISTÓRICA ADICIONAL (Archivos CSV locales):
-${incidenciaArchivosTexto || "No se encontraron delitos adicionales en los archivos CSV locales dentro del radio analizado."}
+## INCIDENCIA ADICIONAL (archivos CSV locales)
+${incidenciaArchivosTexto || "No se encontraron delitos adicionales en archivos CSV dentro del radio."}
 
-CONTEXTO VISUAL HISTÓRICO (Street View):
+## CONTEXTO VISUAL (Street View)
 ${streetViewTexto}
 
-OBJETIVOS PRIORITARIOS MARCADOS POR EL ANALISTA:
+## OBJETIVOS PRIORITARIOS MARCADOS POR EL ANALISTA
 ${focusAreasTexto}
 
-DIRECTIVA DE EVIDENCIA VISUAL MARKDOWN:
-Se te ha proporcionado una lista de puntos de interés (POIs) cercanos junto con URLs de imágenes de Street View/Places. 
-TIENES LA OBLIGACIÓN de incrustar estas imágenes dentro de tu dictamen usando la sintaxis Markdown:
-![Descripción del Lugar](URL_PROPORCIONADA).
-Cada vez que menciones un atractor o zona de riesgo clave detectado en los datos, ilustra tu punto pegando la imagen correspondiente debajo del párrafo.
-
-Listado de imágenes disponibles (formato Markdown):
+## IMÁGENES DE POIs (Markdown)
+Incrusta en el dictamen las imágenes donde sea relevante usando: ![Descripción](URL).
+Listado:
 ${poiImagesMarkdown}
 
+---
 INSTRUCCIÓN FINAL:
-Basa tu redacción, terminología y análisis ESTRICTAMENTE en la bibliografía y manuales institucionales proporcionados en el System Instruction. 
-No inventes teorías que no estén explícitamente presentes en dichos documentos.
-Analiza toda esta información bajo los marcos de Actividades Rutinarias, Patrón Delictivo, Elección Racional y Ventanas Rotas. 
-Redacta un PERFIL CRIMINOLÓGICO AMBIENTAL en español, con lenguaje técnico, policial y objetivo.
-Estructura el resultado en secciones claras (por ejemplo: Contexto Espacial, Deterioro Físico, Atractores y Guardianes, Rutinas y Oportunidades, Riesgos y Recomendaciones).
-Al final, incluye obligatoriamente un apartado titulado "INFORMACIÓN PREDICTIVA" donde estimes la probabilidad de incremento delictivo a 6 meses si no se mejora la estética urbana y las condiciones ambientales, justificando tu análisis en términos criminológicos.
+Redacta un único PERFIL CRIMINOLÓGICO AMBIENTAL en español, técnico y objetivo. Estructura OBLIGATORIAMENTE en las siguientes secciones (con estos títulos en mayúsculas), en este orden:
+
+1. OBJETIVO DEL DICTAMEN — Una oración que indique el propósito del perfil y la zona analizada.
+2. CONTEXTO ESPACIAL — Descripción del área (dirección, colonia, entorno) y del radio de análisis.
+3. DETERIORO FÍSICO Y SEÑALES DE VENTANAS ROTAS — Síntesis de lo detectado por Vision en las fotos; sin repetir listas crudas.
+4. ATRACTORES, CONTROLES Y GUARDIANES — Comercios, POIs y su relación con rutinas y oportunidades delictivas; usa las imágenes de POIs donde aporten.
+5. RUTINAS Y OPORTUNIDADES — Análisis desde Actividades Rutinarias y Elección Racional con los datos de incidencia y ubicación.
+6. RIESGOS IDENTIFICADOS — Puntos concretos de riesgo derivados del análisis, sin repetir párrafos anteriores.
+7. RECOMENDACIONES — Medidas accionables y vinculadas a los hallazgos.
+8. INFORMACIÓN PREDICTIVA — Estimación de probabilidad de incremento delictivo a 6 meses si no se interviene (baja/media/alta o porcentual), con justificación criminológica breve.
+
+No inventes datos ni teorías ajenas a la bibliografía. Evita redundancia entre secciones; cada idea una sola vez.
 `.trim();
 
   return prompt;
@@ -456,12 +551,14 @@ export async function POST(req: Request) {
         : null;
 
     let incidenciaArchivosTexto = "";
+    let totalIncidenciaCSV = 0;
     try {
       const nearbyCrimes = await getNearbyCrimes(
         centerLat,
         centerLng,
         radiusMeters
       );
+      totalIncidenciaCSV = nearbyCrimes.length;
       incidenciaArchivosTexto =
         nearbyCrimes.length === 0
           ? "No se encontraron delitos en los archivos CSV locales dentro del radio analizado."
@@ -480,8 +577,11 @@ export async function POST(req: Request) {
 
     let irregularidadesTexto = "";
     let poiImages: Array<{ name: string; category: string; streetViewUrl: string }> = [];
+    let numIrregulares = 0;
+    let numPois = 0;
     try {
       const irregs = buildIrregularBusinesses(placesResult, denueResult);
+      numIrregulares = irregs.posiblesIrregulares.length;
       if (irregs.posiblesIrregulares.length > 0) {
         irregularidadesTexto =
           "Se identifican los siguientes comercios potencialmente irregulares (Google Places sin correspondencia clara en DENUE):\n" +
@@ -515,6 +615,7 @@ export async function POST(req: Request) {
           }))
         : [];
       const mergedPois = mergeAndDeduplicatePOIs(denuePois, placesPois);
+      numPois = mergedPois.length;
       if (mergedPois.length > 0) {
         const resumenPOI = mergedPois
           .slice(0, 50)
@@ -608,12 +709,22 @@ export async function POST(req: Request) {
       throw err;
     }
 
+    const riskLevel = computeRiskLevel({
+      totalIncidenciaDB: incidenciaResumen.total,
+      totalIncidenciaCSV,
+      porDelito: incidenciaResumen.porDelito,
+      numIrregulares,
+      numPois,
+      radioMetros: radiusMeters,
+    });
+
     return NextResponse.json(
       {
         markdown,
         meta: {
           center: { lat: centerLat, lng: centerLng },
           incidencia: incidenciaResumen,
+          riskLevel,
         },
       },
       { status: 200 }

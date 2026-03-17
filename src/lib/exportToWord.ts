@@ -17,9 +17,10 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
       imgSrc = objectUrl;
     }
 
-    // 3. Cargar la imagen de forma segura (sirve tanto para blob: como para objectUrl http descargada)
     const img = new Image();
-    img.crossOrigin = "Anonymous";
+    if (imgSrc.startsWith("http://") || imgSrc.startsWith("https://")) {
+      img.crossOrigin = "Anonymous";
+    }
     img.src = imgSrc;
 
     await new Promise<void>((resolve, reject) => {
@@ -76,10 +77,21 @@ async function applyWatermarkForWord(imageUrl: string): Promise<ArrayBuffer> {
   }
 }
 
+function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
+  const base64 = dataUrl.indexOf(",") >= 0 ? dataUrl.split(",")[1] : dataUrl;
+  if (!base64) throw new Error("Data URL inválida");
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
 export async function exportToWord(
   content: string,
   projectName: string,
-  attachedPhotos?: string[]
+  attachedPhotos?: string[],
+  riskLevel?: "bajo" | "medio" | "alto",
+  mapImageDataUrl?: string
 ) {
   const lines = content.split(/\r?\n/);
 
@@ -89,6 +101,27 @@ export async function exportToWord(
         children: [new TextRun(line)],
       })
   );
+
+  if (riskLevel) {
+    const label =
+      riskLevel === "bajo"
+        ? "Nivel de riesgo: Bajo"
+        : riskLevel === "medio"
+          ? "Nivel de riesgo: Medio"
+          : "Nivel de riesgo: Alto";
+    paragraphs.unshift(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: label,
+            bold: true,
+            size: 28,
+          }),
+        ],
+      }),
+      new Paragraph({ children: [new TextRun("")] })
+    );
+  }
 
   const sections: any[] = [
     {
@@ -145,6 +178,37 @@ export async function exportToWord(
           ...imageParagraphs,
         ],
       });
+    }
+  }
+
+  if (mapImageDataUrl && mapImageDataUrl.startsWith("data:image")) {
+    try {
+      const mapBuffer = dataUrlToArrayBuffer(mapImageDataUrl);
+      sections.push({
+        children: [
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "MAPA DEL ANÁLISIS",
+                bold: true,
+                size: 32,
+              }),
+            ],
+          }),
+          new Paragraph({
+            children: [
+              new ImageRun({
+                ...({
+                  data: mapBuffer,
+                  transformation: { width: 600, height: 400 },
+                } as any),
+              }),
+            ],
+          }),
+        ],
+      });
+    } catch (e) {
+      console.warn("[exportToWord] No se pudo incluir el mapa:", e);
     }
   }
 

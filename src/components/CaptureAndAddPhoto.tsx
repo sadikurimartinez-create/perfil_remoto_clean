@@ -71,14 +71,13 @@ export function CaptureAndAddPhoto() {
     }
     setIsReading(true);
 
-    let compressed: File;
+    let compressed: File = selected;
     try {
       compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
     } catch (err) {
       console.error(err);
-      setError("No se pudo comprimir la imagen. Pruebe con una foto más pequeña o en JPG/PNG.");
-      setIsReading(false);
-      return;
+      // Fallback: usar la imagen original si la compresión falla
+      setError("No se pudo comprimir la imagen. Se usará la foto original.");
     }
 
     setFile(compressed);
@@ -182,14 +181,13 @@ export function CaptureAndAddPhoto() {
     setError(null);
 
     for (const selected of files) {
-      let compressed: File;
+      let compressed: File = selected;
       try {
         compressed = await imageCompression(selected, COMPRESSION_OPTIONS);
       } catch (err) {
         console.error("[CaptureAndAddPhoto] Error comprimiendo:", err);
-        setError("No se pudo comprimir una imagen. Use fotos más pequeñas o en JPG/PNG.");
-        e.target.value = "";
-        return;
+        // Fallback: mantener la imagen original para no bloquear la subida
+        setError("No se pudo comprimir una imagen. Se usará la foto original.");
       }
 
       let lat: number | null = null;
@@ -300,7 +298,7 @@ export function CaptureAndAddPhoto() {
       <input
         ref={galleryInputRef}
         type="file"
-        accept="image/jpeg, image/png, image/webp"
+        accept="image/*"
         multiple
         className="hidden"
         onChange={handleGalleryUpload}

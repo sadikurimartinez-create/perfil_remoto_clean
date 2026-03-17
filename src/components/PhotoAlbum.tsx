@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import html2canvas from "html2canvas";
 import { useProject } from "@/context/ProjectContext";
 import { AnalysisMap } from "./AnalysisMap";
@@ -65,6 +66,8 @@ function readFileAsBase64(file: File): Promise<string> {
   });
 }
 
+const C4_RIGHT_COLUMN_ID = "c4-right-column";
+
 type PhotoAlbumProps = {
   onDeletePhoto?: (id: string) => void;
   projectId?: string;
@@ -72,13 +75,21 @@ type PhotoAlbumProps = {
     content: string,
     attachedPhotos?: Array<{ id: string; lat: number | null; lng: number | null; tipo: string }>
   ) => Promise<void>;
+  /** Vista Centro de Comando: columna derecha para mapa y gráficas (portal). */
+  splitLayout?: boolean;
 };
 
 export function PhotoAlbum({
   onDeletePhoto,
   projectId,
   onSaveAnalysisToCloud,
+  splitLayout = false,
 }: PhotoAlbumProps = {}) {
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!splitLayout || typeof document === "undefined") return;
+    setPortalTarget(document.getElementById(C4_RIGHT_COLUMN_ID));
+  }, [splitLayout]);
   const {
     album,
     selectedIds,
@@ -102,6 +113,14 @@ export function PhotoAlbum({
   const [focusAreas, setFocusAreas] = useState<string[]>([]);
   const [isRefining, setIsRefining] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [profileRiskLevel, setProfileRiskLevel] = useState<
+    "bajo" | "medio" | "alto" | null
+  >(null);
+  const [analysisPolygon, setAnalysisPolygon] = useState<google.maps.LatLngLiteral[]>([]);
+  const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
+  const [isPreliminaryMapConfirmed, setIsPreliminaryMapConfirmed] = useState(false);
+  const recognitionRef = useRef<any | null>(null);
+  const lastTranscriptRef = useRef<string>("");
 
   const handleGenerarAnalisis = async () => {
     if (selectedIds.length === 0) {
@@ -237,6 +256,16 @@ export function PhotoAlbum({
         })
       );
 
+      const mapRes = await fetch("/api/analyze-selection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ photos: photosPayload, analysisRadius }),
+      });
+      if (mapRes.ok) {
+        const mapData = await mapRes.json();
+        setAnalysisResult(mapData);
+      }
+
       const res = await fetch("/api/generate-profile", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -259,10 +288,14 @@ export function PhotoAlbum({
         }
         throw new Error(msg);
       }
-      const data = (await res.json()) as { markdown: string };
+      const data = (await res.json()) as {
+        markdown: string;
+        meta?: { riskLevel?: "bajo" | "medio" | "alto" };
+      };
       const markdown = data.markdown ?? "";
       setAiProfile(markdown);
       setEditableProfile(markdown);
+      setProfileRiskLevel(data.meta?.riskLevel ?? null);
     } catch (err) {
       console.error(err);
       setError(
@@ -286,26 +319,46 @@ export function PhotoAlbum({
       );
       return;
     }
+
     try {
-      const recognition = new SpeechRecognition();
-      recognition.lang = "es-MX";
-      recognition.interimResults = false;
-      recognition.maxAlternatives = 1;
+      if (!recognitionRef.current) {
+        const recognition = new SpeechRecognition();
+        recognition.lang = "es-MX";
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        (recognition as any).continuous = false;
 
-      recognition.onstart = () => setIsListening(true);
-      recognition.onerror = () => setIsListening(false);
-      recognition.onend = () => setIsListening(false);
-      recognition.onresult = (event: any) => {
-        const transcript = event.results?.[0]?.[0]?.transcript as
-          | string
-          | undefined;
-        if (!transcript) return;
-        setAnalysisContext((prev) =>
-          prev ? `${prev.trim()} ${transcript}` : transcript
-        );
-      };
+        recognition.onstart = () => setIsListening(true);
+        recognition.onerror = (event: any) => {
+          console.error("Error en micrófono:", event?.error);
+          setIsListening(false);
+        };
+        recognition.onend = () => setIsListening(false);
+        recognition.onresult = (event: any) => {
+          const transcript = event.results?.[0]?.[0]?.transcript?.trim() as
+            | string
+            | undefined;
+          if (!transcript) return;
 
-      recognition.start();
+          // Evitar repetir exactamente la misma frase varias veces
+          if (transcript === lastTranscriptRef.current) return;
+          lastTranscriptRef.current = transcript;
+
+          setAnalysisContext((prev) =>
+            prev ? `${prev.trim()} ${transcript}` : transcript
+          );
+        };
+
+        recognitionRef.current = recognition;
+      }
+
+      const recognition = recognitionRef.current as SpeechRecognition;
+      if (isListening) {
+        recognition.stop();
+      } else {
+        lastTranscriptRef.current = "";
+        recognition.start();
+      }
     } catch (e) {
       console.error("[PhotoAlbum] Error al iniciar reconocimiento de voz:", e);
       setIsListening(false);
@@ -336,6 +389,46 @@ export function PhotoAlbum({
     }
   };
 
+  const handleExportToWord = async () => {
+    const content = editableProfile || aiProfile;
+    if (!content) return;
+    setError(null);
+    let mapDataUrl: string | undefined;
+    if (analysisResult) {
+      const mapEl = document.getElementById("map-export-container");
+      if (mapEl) {
+        try {
+          const canvas = await html2canvas(mapEl, {
+            useCORS: true,
+            allowTaint: true,
+            scale: 1.5,
+          });
+          mapDataUrl = canvas.toDataURL("image/png");
+        } catch (e) {
+          console.warn("[PhotoAlbum] No se pudo capturar el mapa para Word:", e);
+        }
+      }
+    }
+    const photoUrls = album
+      .filter((p) => selectedIds.includes(p.id))
+      .map((p) => p.previewUrl)
+      .filter((u): u is string => typeof u === "string" && u.length > 0);
+    try {
+      await exportToWord(
+        content,
+        "Dictamen_criminologico_ambiental",
+        photoUrls.length > 0 ? photoUrls : undefined,
+        profileRiskLevel ?? undefined,
+        mapDataUrl
+      );
+    } catch (err) {
+      console.error("[PhotoAlbum] Error al exportar a Word:", err);
+      setError(
+        err instanceof Error ? err.message : "No se pudo generar el documento Word."
+      );
+    }
+  };
+
   if (album.length === 0) {
     return (
       <section className="card p-6 text-center text-slate-400 text-sm">
@@ -344,8 +437,47 @@ export function PhotoAlbum({
     );
   }
 
+  const rightColumnContent = analysisResult && (
+    <div className="space-y-4 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4">
+      <h4 className="text-base font-bold text-sky-200 font-mono tracking-tight">Mapa y gráficas</h4>
+      {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
+        <CrimeCharts crimes={analysisResult.historicalCrimes} />
+      )}
+      <div id="map-export-container" className="rounded-xl border border-slate-700/50 bg-white text-black overflow-hidden min-h-[320px]">
+        <header className="flex items-center justify-between w-full px-4 py-3 border-b border-slate-300 bg-slate-50">
+          <div className="flex items-center gap-2">
+            <img src="/logos/logo-ssp.png" alt="SSP" className="h-10 w-auto object-contain" />
+            <div className="text-center">
+              <p className="text-[11px] font-semibold text-slate-700">PERFILADOR CRIMINOLÓGICO AMBIENTAL</p>
+              <p className="text-[10px] font-semibold text-slate-600">CEIPOL · SSP AGS</p>
+            </div>
+            <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-10 w-auto object-contain" />
+          </div>
+        </header>
+        <div className="relative p-2">
+          <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-10">
+            <img src="/logos/logo-ssp.png" alt="" className="h-20 w-auto" />
+          </div>
+          <AnalysisMap
+            album={album.filter((p) => selectedIds.includes(p.id))}
+            analysisResult={analysisResult}
+            analysisRadius={analysisRadius}
+          />
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={handleDownloadMap}
+        className="w-full inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors"
+      >
+        Descargar Mapa Oficial
+      </button>
+    </div>
+  );
+
   return (
-    <section className="card p-4 md:p-6 space-y-4">
+    <>
+      <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-semibold text-slate-100">Álbum fotográfico</h3>
         <div className="flex gap-2">
@@ -412,7 +544,7 @@ export function PhotoAlbum({
                   )}
                   <p className="text-[10px] font-medium text-slate-300 truncate mt-0.5">{p.tipo}</p>
                   <p className="text-[10px] text-slate-500 truncate">{p.comentario || "—"}</p>
-                  <p className="text-[9px] text-slate-600 font-mono">
+                  <p className="text-[9px] font-mono tracking-tight text-blue-300">
                     {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
                       ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`
                       : "Sin GPS"}
@@ -425,40 +557,63 @@ export function PhotoAlbum({
       </div>
 
       <div className="pt-2 border-t border-slate-800 space-y-2">
-        {/** Botón principal de IA completa con reloj de arena y estados de texto */}
-        <button
-          type="button"
-          onClick={handleGenerateAIProfile}
-          disabled={isGeneratingAI || selectedIds.length === 0}
-          className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-        >
-          {isGeneratingAI ? (
-            <>
-              <svg
-                className="mr-2 h-4 w-4 animate-spin text-slate-100"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  className="opacity-25"
-                  fill="currentColor"
-                  d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
-                />
-              </svg>
-              Procesando…
-            </>
-          ) : aiProfile ? (
-            "Análisis Generado"
-          ) : (
-            "Generar Análisis Criminológico"
-          )}
-        </button>
-        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+        {!isPreliminaryMapConfirmed ? (
+          <>
+            <button
+              type="button"
+              disabled={selectedIds.length === 0}
+              className="w-full inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+              onClick={() => {
+                if (selectedIds.length === 0) {
+                  setError("Seleccione al menos una fotografía para generar el mapa preliminar.");
+                  return;
+                }
+                setError(null);
+                setIsPreliminaryMapConfirmed(false);
+              }}
+            >
+              Generar mapa preliminar
+            </button>
+            {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+          </>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={handleGenerateAIProfile}
+              disabled={isGeneratingAI || selectedIds.length === 0}
+              className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {isGeneratingAI ? (
+                <>
+                  <svg className="mr-2 h-4 w-4 animate-spin text-slate-100" viewBox="0 0 24 24" aria-hidden="true">
+                    <path className="opacity-25" fill="currentColor" d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z" />
+                  </svg>
+                  Procesando…
+                </>
+              ) : aiProfile ? (
+                "Análisis Generado"
+              ) : (
+                "Generar Análisis Criminológico"
+              )}
+            </button>
+            {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+          </>
+        )}
       </div>
 
-      {analysisResult && (
-        <div className="space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/50 rounded-xl p-4">
-          <h4 className="text-base font-bold text-sky-200">
+      {isGeneratingAI && (
+        <div className="animate-pulse space-y-4 p-6 bg-slate-900/40 rounded-xl border border-slate-700/50">
+          <div className="h-4 bg-slate-700 rounded w-3/4" />
+          <div className="h-4 bg-slate-700 rounded w-full" />
+          <div className="h-4 bg-slate-700 rounded w-5/6" />
+          <div className="h-32 bg-slate-700/50 rounded w-full mt-6" />
+        </div>
+      )}
+
+      {analysisResult && isPreliminaryMapConfirmed && (
+        <div className="space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4">
+          <h4 className="text-base font-bold text-sky-200 font-mono tracking-tight">
             Perfil criminológico generado
           </h4>
           <p className="text-xs text-slate-400">
@@ -469,77 +624,119 @@ export function PhotoAlbum({
               {analysisResult.unifiedProfile}
             </div>
           )}
-          {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
-            <CrimeCharts crimes={analysisResult.historicalCrimes} />
-          )}
-          <div
-            id="map-export-container"
-            className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden"
-          >
-            <header className="flex items-center justify-between w-full px-6 py-4 border-b border-slate-300 bg-slate-50">
-              <div className="flex items-center justify-center">
-                <img
-                  src="/logos/logo-ssp.png"
-                  alt="Secretaría de Seguridad Pública"
-                  className="h-16 w-auto object-contain"
-                />
-              </div>
-              <div className="flex flex-col items-center justify-center text-center">
-                <p className="text-[13px] font-semibold tracking-wide text-slate-700">
-                  PERFILADOR CRIMINOLÓGICO AMBIENTAL
-                </p>
-                <p className="text-[12px] font-semibold tracking-wide text-slate-700">
-                  CEIPOL
-                </p>
-                <p className="text-[10px] font-semibold tracking-wide text-slate-600">
-                  SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES
-                </p>
-              </div>
-              <div className="flex items-center justify-center">
-                <img
-                  src="/logos/logo-ceipol.png"
-                  alt="CEIPOL"
-                  className="h-16 w-auto object-contain"
-                />
-              </div>
-            </header>
-            <div className="relative p-2">
-              {/* Sellos de agua institucionales */}
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-10">
-                <div className="flex flex-col items-center gap-4">
-                  <img
-                    src="/logos/logo-ssp.png"
-                    alt="SSP watermark"
-                    className="h-32 w-auto object-contain"
-                  />
-                  <img
-                    src="/logos/logo-ceipol.png"
-                    alt="CEIPOL watermark"
-                    className="h-24 w-auto object-contain"
+          {!splitLayout && (
+            <>
+              {analysisResult.historicalCrimes && analysisResult.historicalCrimes.length > 0 && (
+                <CrimeCharts crimes={analysisResult.historicalCrimes} />
+              )}
+              <div id="map-export-container" className="mt-3 rounded-xl border border-slate-300 bg-white text-black overflow-hidden min-h-[320px]">
+                <header className="flex items-center justify-between w-full px-6 py-4 border-b border-slate-300 bg-slate-50">
+                  <div className="flex items-center justify-center">
+                    <img src="/logos/logo-ssp.png" alt="SSP" className="h-16 w-auto object-contain" />
+                  </div>
+                  <div className="flex flex-col items-center justify-center text-center">
+                    <p className="text-[13px] font-semibold tracking-wide text-slate-700">PERFILADOR CRIMINOLÓGICO AMBIENTAL</p>
+                    <p className="text-[12px] font-semibold tracking-wide text-slate-700">CEIPOL</p>
+                    <p className="text-[10px] font-semibold tracking-wide text-slate-600">SECRETARÍA DE SEGURIDAD PÚBLICA DEL ESTADO DE AGUASCALIENTES</p>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <img src="/logos/logo-ceipol.png" alt="CEIPOL" className="h-16 w-auto object-contain" />
+                  </div>
+                </header>
+                <div className="relative p-2">
+                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center opacity-10">
+                    <div className="flex flex-col items-center gap-4">
+                      <img src="/logos/logo-ssp.png" alt="" className="h-32 w-auto" />
+                      <img src="/logos/logo-ceipol.png" alt="" className="h-24 w-auto" />
+                    </div>
+                  </div>
+                  <AnalysisMap
+                    album={album.filter((p) => selectedIds.includes(p.id))}
+                    analysisResult={analysisResult}
+                    analysisRadius={analysisRadius}
+                    analysisPolygon={analysisPolygon}
+                    setAnalysisPolygon={setAnalysisPolygon}
+                    manualPois={manualPois}
+                    setManualPois={setManualPois}
+                    isPreliminary={!isPreliminaryMapConfirmed}
                   />
                 </div>
               </div>
-              <AnalysisMap
-                album={album.filter((p) => selectedIds.includes(p.id))}
-                analysisResult={analysisResult}
-              />
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleDownloadMap}
-            className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors"
-          >
-            Descargar Mapa Oficial
-          </button>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsPreliminaryMapConfirmed(true)}
+                  className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
+                >
+                  Confirmar perímetro y analizar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadMap}
+                  className="inline-flex items-center justify-center rounded-md bg-slate-700 px-4 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-600 transition-colors"
+                >
+                  Descargar Mapa Oficial
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
       {aiProfile && (
         <div className="space-y-3 pt-4 border-t-2 border-indigo-500/60 bg-slate-900/70 rounded-xl p-4">
-          <h4 className="text-base font-bold text-indigo-200">
-            Perfil criminológico ambiental (IA completa)
-          </h4>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-base font-bold text-indigo-200">
+              Perfil criminológico ambiental (IA completa)
+            </h4>
+            {profileRiskLevel && (
+              <div
+                className="flex items-center gap-2 rounded-lg border border-slate-600 bg-slate-800/80 px-3 py-1.5"
+                title="Nivel de riesgo según incidencia en la zona"
+              >
+                <span className="text-xs font-medium text-slate-400">
+                  Riesgo:
+                </span>
+                <div className="flex items-center gap-1">
+                  <span
+                    className={`inline-block h-3 w-3 rounded-full ${
+                      profileRiskLevel === "bajo"
+                        ? "bg-emerald-500 ring-2 ring-emerald-400 ring-offset-1 ring-offset-slate-900"
+                        : "bg-emerald-500/40"
+                    }`}
+                    aria-hidden
+                  />
+                  <span
+                    className={`inline-block h-3 w-3 rounded-full ${
+                      profileRiskLevel === "medio"
+                        ? "bg-amber-500 ring-2 ring-amber-400 ring-offset-1 ring-offset-slate-900"
+                        : "bg-amber-500/40"
+                    }`}
+                    aria-hidden
+                  />
+                  <span
+                    className={`inline-block h-3 w-3 rounded-full ${
+                      profileRiskLevel === "alto"
+                        ? "bg-red-500 ring-2 ring-red-400 ring-offset-1 ring-offset-slate-900"
+                        : "bg-red-500/40"
+                    }`}
+                    aria-hidden
+                  />
+                </div>
+                <span
+                  className={`text-xs font-semibold capitalize ${
+                    profileRiskLevel === "bajo"
+                      ? "text-emerald-400"
+                      : profileRiskLevel === "medio"
+                        ? "text-amber-400"
+                        : "text-red-400"
+                  }`}
+                >
+                  {profileRiskLevel}
+                </span>
+              </div>
+            )}
+          </div>
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-200">
               Dictamen editable por el analista
@@ -567,12 +764,7 @@ export function PhotoAlbum({
             )}
             <button
               type="button"
-              onClick={() =>
-                exportToWord(
-                  editableProfile || aiProfile,
-                  "Dictamen_criminologico_ambiental"
-                )
-              }
+              onClick={() => void handleExportToWord()}
               className="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 transition-colors"
             >
               Exportar a Word
@@ -782,5 +974,7 @@ export function PhotoAlbum({
         </div>
       )}
     </section>
+      {portalTarget && rightColumnContent && createPortal(rightColumnContent, portalTarget)}
+    </>
   );
 }

@@ -2,15 +2,27 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Circle, GoogleMap, HeatmapLayer, Marker, useJsApiLoader } from "@react-google-maps/api";
+import type { DrawingManager as GMapsDrawingManager } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 type AnalysisMapProps = {
   album: AlbumPhoto[];
   analysisResult: AnalysisResult | null;
+  /** Radio de la zona de análisis en metros (círculo en el mapa). Por defecto 500. */
+  analysisRadius?: number;
+  /** Polígono de análisis dibujado manualmente por el analista. */
+  analysisPolygon?: google.maps.LatLngLiteral[];
+  setAnalysisPolygon?: (coords: google.maps.LatLngLiteral[]) => void;
+  /** POIs manuales fijados por el analista en el mapa preliminar. */
+  manualPois?: { lat: number; lng: number; label?: string }[];
+  setManualPois?: (value: { lat: number; lng: number; label?: string }[]) => void;
+  /** Controla si el mapa está en modo preliminar (se muestran herramientas de dibujo y toolbar). */
+  isPreliminary?: boolean;
 };
 
-const containerStyle = {
+const containerStyle: React.CSSProperties = {
   width: "100%",
+  minHeight: "280px",
   height: "320px",
 };
 
@@ -23,9 +35,20 @@ function hasValidCoords(p: { lat?: number | null; lng?: number | null }): boolea
   );
 }
 
-export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
+export function AnalysisMap({
+  album,
+  analysisResult,
+  analysisRadius = 500,
+  analysisPolygon,
+  setAnalysisPolygon,
+  manualPois,
+  setManualPois,
+  isPreliminary = false,
+}: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [drawingManager, setDrawingManager] = useState<GMapsDrawingManager | null>(null);
+  const [isPlacingManualPoi, setIsPlacingManualPoi] = useState(false);
 
   const photosWithCoords = useMemo(
     () => album.filter(hasValidCoords) as Array<{ id: string; lat: number; lng: number; tipo: string; comentario: string }>,
@@ -70,10 +93,11 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
     mapRef.current.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
   }, [mapReady, boundsPoints]);
 
+  const apiKey = typeof process !== "undefined" ? (process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "") : "";
   const { isLoaded, loadError } = useJsApiLoader({
     id: "analysis-map",
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? "",
-    libraries: ["visualization"],
+    googleMapsApiKey: apiKey,
+    libraries: ["visualization", "drawing"],
   });
 
   const heatmapCrimeData = useMemo(() => {
@@ -86,25 +110,46 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
       return [];
     }
     const g = (window as any).google as typeof google;
-    return analysisResult.historicalCrimes
-      .filter((c) => hasValidCoords(c))
-      .map((c) => ({
-        location: new g.maps.LatLng(c.lat as number, c.lng as number),
-        weight: 1,
-      }));
+    const valid = analysisResult.historicalCrimes.filter((c) => hasValidCoords(c));
+    if (valid.length === 0) return [];
+
+    const cellSize = 0.0001;
+    const grid = new Map<string, { lat: number; lng: number; count: number }>();
+    for (const c of valid) {
+      const lat = c.lat as number;
+      const lng = c.lng as number;
+      const key = `${Math.round(lat / cellSize) * cellSize},${Math.round(lng / cellSize) * cellSize}`;
+      const existing = grid.get(key);
+      if (existing) existing.count += 1;
+      else grid.set(key, { lat, lng, count: 1 });
+    }
+    return Array.from(grid.values()).map(({ lat, lng, count }) => ({
+      location: new g.maps.LatLng(lat, lng),
+      weight: Math.min(count * 1.5, 10),
+    }));
   }, [analysisResult?.historicalCrimes, isLoaded]);
+
+  if (!apiKey || apiKey.trim() === "") {
+    return (
+      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-amber-400">
+        <p className="font-semibold">Mapa no disponible</p>
+        <p className="mt-1">Falta la clave de Google Maps (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY). En móvil, asegúrese de que la app se sirve con la variable configurada.</p>
+      </div>
+    );
+  }
 
   if (loadError) {
     return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-red-400">
-        Error al cargar Google Maps. Verifique la clave y las APIs habilitadas.
+      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-red-400 space-y-2">
+        <p className="font-semibold">Error al cargar el mapa</p>
+        <p>Verifique en Google Cloud: Maps JavaScript API y biblioteca Visualization habilitadas, clave sin restricciones que bloqueen este dominio o dispositivo (en Android use la misma URL que en escritorio o añada restricciones por sitio).</p>
       </div>
     );
   }
 
   if (!isLoaded) {
     return (
-      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-400">
+      <div className="rounded-lg border border-slate-700 bg-slate-900/50 p-4 text-sm text-slate-400 min-h-[200px] flex items-center justify-center">
         Cargando mapa de Google…
       </div>
     );
@@ -125,12 +170,46 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
   };
 
   return (
-    <div className="rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50">
+    <div className="relative rounded-lg border border-slate-700 overflow-hidden bg-slate-900/50">
+      {isPreliminary && (
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-2 rounded-lg bg-slate-900/80 backdrop-blur-md border border-slate-700 px-3 py-1.5 text-xs text-slate-200 shadow-lg">
+          <span className="font-semibold tracking-tight text-emerald-300">
+            Mapa preliminar
+          </span>
+          {setManualPois && (
+            <button
+              type="button"
+              onClick={() => setIsPlacingManualPoi((prev) => !prev)}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-1 border text-[11px] ${
+                isPlacingManualPoi
+                  ? "border-amber-400 bg-amber-500/20 text-amber-200"
+                  : "border-slate-600 bg-slate-800/70 text-slate-200"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-400" />
+              Fijar POI manual
+            </button>
+          )}
+        </div>
+      )}
       <GoogleMap
         mapContainerStyle={containerStyle}
         center={center}
         zoom={15}
         onLoad={onMapLoad}
+        onClick={(e) => {
+          if (!isPreliminary || !setManualPois || !isPlacingManualPoi) return;
+          const latLng = e.latLng;
+          if (!latLng) return;
+          const pt = { lat: latLng.lat(), lng: latLng.lng() };
+          const label = window.prompt(
+            "Clasificación del punto (ej. Casa de Seguridad, Baldío, Taller):"
+          );
+          setManualPois([
+            ...(manualPois ?? []),
+            { ...pt, label: label || undefined },
+          ]);
+        }}
         options={{
           streetViewControl: false,
           mapTypeControl: false,
@@ -138,17 +217,19 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           mapTypeId: "hybrid",
         }}
       >
-        <Circle
-          center={center}
-          radius={500}
-          options={{
-            strokeColor: "#ef4444",
-            strokeOpacity: 0.9,
-            strokeWeight: 2,
-            fillColor: "#ef4444",
-            fillOpacity: 0.1,
-          }}
-        />
+        {!isPreliminary && (
+          <Circle
+            center={center}
+            radius={500}
+            options={{
+              strokeColor: "#ef4444",
+              strokeOpacity: 0.9,
+              strokeWeight: 2,
+              fillColor: "#ef4444",
+              fillOpacity: 0.1,
+            }}
+          />
+        )}
 
         {/* Pines rojos: una foto seleccionada = un pin destacado (evidencia fotográfica) */}
         {photosWithCoords.map((p) => (
@@ -229,12 +310,84 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
           );
         })}
 
+        {/* Polígono de análisis dibujado por el analista */}
+        {isPreliminary && analysisPolygon && analysisPolygon.length > 2 && (
+          <google.maps.Polygon
+            paths={analysisPolygon}
+            options={{
+              strokeColor: "#ef4444",
+              strokeOpacity: 1,
+              strokeWeight: 2,
+              fillColor: "#991b1b",
+              fillOpacity: 0.25,
+            }}
+          />
+        )}
+
+        {/* POIs manuales fijados por el analista */}
+        {manualPois?.map((p, idx) => (
+          <Marker
+            key={`manual-poi-${idx}`}
+            position={{ lat: p.lat, lng: p.lng }}
+            title={p.label || "POI manual"}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 7,
+              fillColor: "#f59e0b",
+              fillOpacity: 1,
+              strokeColor: "#1f2937",
+              strokeWeight: 2,
+            }}
+          />
+        ))}
+
         {heatmapCrimeData.length > 0 && (
           <HeatmapLayer
             data={heatmapCrimeData}
             options={{
-              radius: 25,
+              radius: 40,
               dissipating: true,
+              opacity: 0.7,
+              gradient: [
+                "rgba(0,255,0,0)",
+                "rgba(0,255,0,0.4)",
+                "rgba(255,255,0,0.6)",
+                "rgba(255,165,0,0.8)",
+                "rgba(255,0,0,1)",
+              ],
+            }}
+          />
+        )}
+        {isPreliminary && setAnalysisPolygon && (
+          // @ts-expect-error DrawingManager está disponible cuando se incluye la librería "drawing"
+          <DrawingManager
+            onLoad={(dm: GMapsDrawingManager) => {
+              setDrawingManager(dm);
+              // Sólo permitir polígonos
+              dm.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
+            }}
+            onPolygonComplete={(poly: google.maps.Polygon) => {
+              const path = poly.getPath();
+              const coords: google.maps.LatLngLiteral[] = [];
+              for (let i = 0; i < path.getLength(); i++) {
+                const pt = path.getAt(i);
+                coords.push({ lat: pt.lat(), lng: pt.lng() });
+              }
+              setAnalysisPolygon(coords);
+              poly.setMap(null);
+              if (drawingManager) {
+                drawingManager.setDrawingMode(null);
+              }
+            }}
+            options={{
+              drawingControl: false,
+              polygonOptions: {
+                strokeColor: "#ef4444",
+                strokeOpacity: 1,
+                strokeWeight: 2,
+                fillColor: "#991b1b",
+                fillOpacity: 0.25,
+              },
             }}
           />
         )}
@@ -265,13 +418,22 @@ export function AnalysisMap({ album, analysisResult }: AnalysisMapProps) {
             <span className="inline-flex h-3 w-3 rounded-full bg-red-900" />
             <span className="text-slate-400">
               <span className="font-semibold text-slate-200">Incidencia:</span>{" "}
-              Delitos históricos en la zona analizada.
+              Delitos históricos (puntos y heatmap de concentración).
             </span>
           </div>
         </div>
+        {heatmapCrimeData.length > 0 && (
+          <p className="text-xs text-slate-500 flex items-center gap-2">
+            <span className="font-medium text-slate-400">Heatmap:</span>
+            Verde (baja) → Amarillo → Naranja → Rojo (alta concentración de incidencia).
+          </p>
+        )}
         <p className="text-sm text-slate-300 mt-1 text-justify leading-relaxed">
           Análisis geoespacial pericial: el presente mapa ilustra un radio de proximidad de{" "}
-          <span className="font-semibold">500 metros</span> en torno a las coordenadas de los indicios fotográficos
+          <span className="font-semibold">
+            {analysisRadius >= 1000 ? `${(analysisRadius / 1000).toFixed(1)} km` : `${analysisRadius} metros`}
+          </span>{" "}
+          en torno a las coordenadas de los indicios fotográficos
           considerados en el expediente. Se han georreferenciado{" "}
           <span className="font-semibold">{poisWithCoords.length}</span>{" "}
           atractores de riesgo o puntos de interés (comercios, servicios, espacios públicos) y{" "}

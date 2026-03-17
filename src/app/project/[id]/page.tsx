@@ -147,42 +147,51 @@ export default function ProjectWorkspacePage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Link
-            href="/"
-            className="text-xs text-slate-500 hover:text-slate-400 mb-1 inline-block"
+    <div className="max-w-[1400px] mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <header className="contents">
+        <div className="flex flex-wrap items-center justify-between gap-3 lg:col-span-12">
+          <div>
+            <Link
+              href="/"
+              className="text-xs text-slate-500 hover:text-slate-400 mb-1 inline-block"
+            >
+              ← Volver a Mis Expedientes
+            </Link>
+            <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
+              {project.nombre}
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5 font-mono tracking-tight text-blue-300/90">
+              ID expediente: {project.id}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => router.push("/")}
+            className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
           >
-            ← Volver a Mis Expedientes
-          </Link>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-100">
-            {project.nombre}
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Espacio de trabajo · Agregue o elimine fotos y genere el análisis.
-          </p>
+            Guardar y Salir a Inicio
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            router.push("/");
-          }}
-          className="inline-flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 transition-colors"
-        >
-          Guardar y Salir a Inicio
-        </button>
+      </header>
+
+      <div className="lg:col-span-7 space-y-6 overflow-y-auto pb-20 lg:pb-0">
+        <CaptureAndAddPhoto />
+        <PhotoAlbum
+          onDeletePhoto={handleDeletePhoto}
+          projectId={project.id}
+          onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
+          splitLayout
+        />
       </div>
 
-      <CaptureAndAddPhoto />
-      <PhotoAlbum
-        onDeletePhoto={handleDeletePhoto}
-        projectId={project.id}
-        onSaveAnalysisToCloud={handleSaveAnalysisToCloud}
+      <div
+        id="c4-right-column"
+        className="lg:col-span-5 space-y-6 lg:sticky lg:top-6 h-fit"
       />
 
+      <div className="lg:col-span-12">
       {analyses && analyses.length > 0 && (
-        <section className="card p-4 md:p-6 space-y-3 mt-2">
+        <section className="bg-slate-900/60 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-xl p-4 md:p-6 space-y-3 mt-2">
           <h3 className="text-sm font-semibold text-slate-100">
             Análisis guardados en este expediente
           </h3>
@@ -190,22 +199,24 @@ export default function ProjectWorkspacePage() {
             {analyses.map((a) => (
               <li
                 key={a.id}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2"
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-700/50 bg-slate-900/60 backdrop-blur-md px-3 py-2"
               >
                 <div className="text-xs text-slate-300">
                   <p className="font-medium">
                     Análisis criminológico ambiental del{" "}
-                    {new Date(a.createdAt).toLocaleString("es-MX", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    <span className="font-mono tracking-tight text-blue-300">
+                      {new Date(a.createdAt).toLocaleString("es-MX", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
                   </p>
                   <p className="text-[11px] text-slate-400 mt-0.5">
                     Ordenado y guardado por:{" "}
-                    <span className="font-semibold text-slate-200">
+                    <span className="font-semibold text-slate-200 font-mono tracking-tight text-blue-300/90">
                       {a.createdBy || "Usuario no identificado"}
                     </span>
                   </p>
@@ -213,8 +224,8 @@ export default function ProjectWorkspacePage() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() =>
-                      exportToWord(
+                    onClick={async () =>
+                      await exportToWord(
                         a.content,
                         project.nombre || "Expediente_sin_nombre",
                         (a.attachedPhotos || [])
@@ -275,6 +286,18 @@ export default function ProjectWorkspacePage() {
           </ul>
         </section>
       )}
+      </div>
+
+      <a
+        href="#c4-right-column"
+        className="fixed bottom-6 right-6 w-14 h-14 bg-emerald-600 rounded-full shadow-lg shadow-emerald-900/50 flex items-center justify-center z-50 text-white hover:bg-emerald-500 transition-transform active:scale-95 lg:hidden"
+        aria-label="Ir a mapa y análisis"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+          <circle cx="12" cy="10" r="3" />
+        </svg>
+      </a>
     </div>
   );
 }
