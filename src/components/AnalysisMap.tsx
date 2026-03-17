@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, GoogleMap, HeatmapLayer, Marker, useJsApiLoader } from "@react-google-maps/api";
-import type { DrawingManager as GMapsDrawingManager } from "@react-google-maps/api";
+import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, DrawingManager, useJsApiLoader } from "@react-google-maps/api";
 import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 type AnalysisMapProps = {
@@ -47,7 +46,7 @@ export function AnalysisMap({
 }: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [drawingManager, setDrawingManager] = useState<GMapsDrawingManager | null>(null);
+  const [drawingManager, setDrawingManager] = useState<google.maps.drawing.DrawingManager | null>(null);
   const [isPlacingManualPoi, setIsPlacingManualPoi] = useState(false);
 
   const photosWithCoords = useMemo(
@@ -312,7 +311,7 @@ export function AnalysisMap({
 
         {/* Polígono de análisis dibujado por el analista */}
         {isPreliminary && analysisPolygon && analysisPolygon.length > 2 && (
-          <google.maps.Polygon
+          <Polygon
             paths={analysisPolygon}
             options={{
               strokeColor: "#ef4444",
@@ -359,9 +358,8 @@ export function AnalysisMap({
           />
         )}
         {isPreliminary && setAnalysisPolygon && (
-          // @ts-expect-error DrawingManager está disponible cuando se incluye la librería "drawing"
           <DrawingManager
-            onLoad={(dm: GMapsDrawingManager) => {
+            onLoad={(dm: google.maps.drawing.DrawingManager) => {
               setDrawingManager(dm);
               // Sólo permitir polígonos
               dm.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);

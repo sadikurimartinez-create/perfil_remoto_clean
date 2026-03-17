@@ -352,7 +352,7 @@ export function PhotoAlbum({
         recognitionRef.current = recognition;
       }
 
-      const recognition = recognitionRef.current as SpeechRecognition;
+      const recognition = recognitionRef.current as any;
       if (isListening) {
         recognition.stop();
       } else {
