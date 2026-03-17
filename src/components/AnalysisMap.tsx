@@ -1,8 +1,8 @@
-\"use client\";
+"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from \"react\";
-import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, useJsApiLoader } from \"@react-google-maps/api\";
-import type { AlbumPhoto, AnalysisResult } from \"@/context/ProjectContext\";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, useJsApiLoader } from "@react-google-maps/api";
+import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
 
 type AnalysisMapProps = {
   album: AlbumPhoto[];
