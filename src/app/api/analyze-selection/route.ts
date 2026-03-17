@@ -20,12 +20,16 @@ type PhotoPayload = {
 type RequestBody = {
   photos: PhotoPayload[];
   analysisRadius?: number;
+  /** Polígono de análisis trazado manualmente (opcional). */
+  analysisPolygon?: { lat: number; lng: number }[];
+  /** POIs manuales trazados por el analista (opcional). */
+  manualPois?: { lat: number; lng: number; label?: string }[];
 };
 
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as RequestBody;
-    const { photos } = body;
+    const { photos, analysisPolygon, manualPois } = body;
 
     if (!Array.isArray(photos) || photos.length === 0) {
       return NextResponse.json(
@@ -205,6 +209,8 @@ export async function POST(req: Request) {
         heatmapData,
         historicalCrimes,
         pois,
+        analysisPolygon: analysisPolygon ?? null,
+        manualPois: manualPois ?? [],
         raw: {
           atractoresDelito,
           comerciosIrregulares

@@ -1,8 +1,8 @@
-"use client";
+\"use client\";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, DrawingManager, useJsApiLoader } from "@react-google-maps/api";
-import type { AlbumPhoto, AnalysisResult } from "@/context/ProjectContext";
+import { useCallback, useEffect, useMemo, useRef, useState } from \"react\";
+import { Circle, GoogleMap, HeatmapLayer, Marker, Polygon, useJsApiLoader } from \"@react-google-maps/api\";
+import type { AlbumPhoto, AnalysisResult } from \"@/context/ProjectContext\";
 
 type AnalysisMapProps = {
   album: AlbumPhoto[];
@@ -46,8 +46,8 @@ export function AnalysisMap({
 }: AnalysisMapProps) {
   const mapRef = useRef<google.maps.Map | null>(null);
   const [mapReady, setMapReady] = useState(false);
-  const [drawingManager, setDrawingManager] = useState<google.maps.drawing.DrawingManager | null>(null);
   const [isPlacingManualPoi, setIsPlacingManualPoi] = useState(false);
+  const [isDrawingPolygon, setIsDrawingPolygon] = useState(false);
 
   const photosWithCoords = useMemo(
     () => album.filter(hasValidCoords) as Array<{ id: string; lat: number; lng: number; tipo: string; comentario: string }>,
@@ -175,6 +175,26 @@ export function AnalysisMap({
           <span className="font-semibold tracking-tight text-emerald-300">
             Mapa preliminar
           </span>
+          {setAnalysisPolygon && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsDrawingPolygon((prev) => !prev);
+                if (isDrawingPolygon && setAnalysisPolygon && (analysisPolygon?.length ?? 0) < 3) {
+                  // Si se desactiva sin formar un polígono válido, limpiar
+                  setAnalysisPolygon([]);
+                }
+              }}
+              className={`inline-flex items-center gap-1 rounded-md px-2 py-1 border text-[11px] ${
+                isDrawingPolygon
+                  ? "border-red-400 bg-red-500/20 text-red-200"
+                  : "border-slate-600 bg-slate-800/70 text-slate-200"
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-red-400" />
+              Trazar perímetro
+            </button>
+          )}
           {setManualPois && (
             <button
               type="button"
@@ -197,17 +217,26 @@ export function AnalysisMap({
         zoom={15}
         onLoad={onMapLoad}
         onClick={(e) => {
-          if (!isPreliminary || !setManualPois || !isPlacingManualPoi) return;
+          if (!isPreliminary) return;
           const latLng = e.latLng;
           if (!latLng) return;
           const pt = { lat: latLng.lat(), lng: latLng.lng() };
-          const label = window.prompt(
-            "Clasificación del punto (ej. Casa de Seguridad, Baldío, Taller):"
-          );
-          setManualPois([
-            ...(manualPois ?? []),
-            { ...pt, label: label || undefined },
-          ]);
+          // Si estamos en modo dibujo de perímetro, acumular vértices del polígono
+          if (isDrawingPolygon && setAnalysisPolygon) {
+            const current = analysisPolygon ?? [];
+            setAnalysisPolygon([...current, pt]);
+            return;
+          }
+          // Si estamos en modo POI manual, fijar un punto de interés
+          if (setManualPois && isPlacingManualPoi) {
+            const label = window.prompt(
+              "Clasificación del punto (ej. Casa de Seguridad, Baldío, Taller):"
+            );
+            setManualPois([
+              ...(manualPois ?? []),
+              { ...pt, label: label || undefined },
+            ]);
+          }
         }}
         options={{
           streetViewControl: false,
@@ -354,38 +383,6 @@ export function AnalysisMap({
                 "rgba(255,165,0,0.8)",
                 "rgba(255,0,0,1)",
               ],
-            }}
-          />
-        )}
-        {isPreliminary && setAnalysisPolygon && (
-          <DrawingManager
-            onLoad={(dm: google.maps.drawing.DrawingManager) => {
-              setDrawingManager(dm);
-              // Sólo permitir polígonos
-              dm.setDrawingMode(google.maps.drawing.OverlayType.POLYGON);
-            }}
-            onPolygonComplete={(poly: google.maps.Polygon) => {
-              const path = poly.getPath();
-              const coords: google.maps.LatLngLiteral[] = [];
-              for (let i = 0; i < path.getLength(); i++) {
-                const pt = path.getAt(i);
-                coords.push({ lat: pt.lat(), lng: pt.lng() });
-              }
-              setAnalysisPolygon(coords);
-              poly.setMap(null);
-              if (drawingManager) {
-                drawingManager.setDrawingMode(null);
-              }
-            }}
-            options={{
-              drawingControl: false,
-              polygonOptions: {
-                strokeColor: "#ef4444",
-                strokeOpacity: 1,
-                strokeWeight: 2,
-                fillColor: "#991b1b",
-                fillOpacity: 0.25,
-              },
             }}
           />
         )}

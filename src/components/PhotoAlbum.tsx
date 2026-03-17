@@ -119,6 +119,7 @@ export function PhotoAlbum({
   const [analysisPolygon, setAnalysisPolygon] = useState<google.maps.LatLngLiteral[]>([]);
   const [manualPois, setManualPois] = useState<{ lat: number; lng: number; label?: string }[]>([]);
   const [isPreliminaryMapConfirmed, setIsPreliminaryMapConfirmed] = useState(false);
+  const [showPreliminaryMap, setShowPreliminaryMap] = useState(false);
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
 
@@ -156,7 +157,12 @@ export function PhotoAlbum({
       const res = await fetch("/api/analyze-selection", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: photosPayload })
+        body: JSON.stringify({
+          photos: photosPayload,
+          analysisRadius,
+          analysisPolygon,
+          manualPois,
+        })
       });
 
       if (!res.ok) {
@@ -561,19 +567,18 @@ export function PhotoAlbum({
           <>
             <button
               type="button"
-              disabled={selectedIds.length === 0 || isAnalyzing}
+              disabled={selectedIds.length === 0}
               className="w-full inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              onClick={async () => {
+              onClick={() => {
                 if (selectedIds.length === 0) {
                   setError("Seleccione al menos una fotografía para generar el mapa preliminar.");
                   return;
                 }
                 setError(null);
-                await handleGenerarAnalisis();
-                setIsPreliminaryMapConfirmed(false);
+                setShowPreliminaryMap(true);
               }}
             >
-              {isAnalyzing ? "Generando mapa preliminar..." : "Generar mapa preliminar"}
+              Generar mapa preliminar
             </button>
             {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
           </>
@@ -602,6 +607,62 @@ export function PhotoAlbum({
           </>
         )}
       </div>
+
+      {showPreliminaryMap && !isPreliminaryMapConfirmed && (
+        <div className="space-y-4 pt-4 border-t-2 border-emerald-500/60 bg-slate-900/70 rounded-xl p-4 border border-slate-700/60">
+          <h4 className="text-base font-bold text-emerald-300 font-mono tracking-tight">
+            Mapa preliminar táctico
+          </h4>
+          <p className="text-xs text-slate-400">
+            Revise la geolocalización de las fotografías seleccionadas, trace el perímetro de estudio y agregue POIs manuales antes de solicitar el análisis de IA.
+          </p>
+          <div className="mt-2 rounded-xl border border-slate-300 bg-white text-black overflow-hidden min-h-[320px]">
+            <div className="relative p-2">
+              <AnalysisMap
+                album={album.filter((p) => selectedIds.includes(p.id))}
+                analysisResult={null}
+                analysisRadius={analysisRadius}
+                analysisPolygon={analysisPolygon}
+                setAnalysisPolygon={setAnalysisPolygon}
+                manualPois={manualPois}
+                setManualPois={setManualPois}
+                isPreliminary={true}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 mt-3">
+            <button
+              type="button"
+              onClick={async () => {
+                setError(null);
+                await handleGenerarAnalisis();
+                setIsPreliminaryMapConfirmed(true);
+                setShowPreliminaryMap(false);
+              }}
+              className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
+            >
+              {isAnalyzing ? (
+                <>
+                  <svg
+                    className="mr-2 h-3 w-3 animate-spin text-slate-100"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      className="opacity-25"
+                      fill="currentColor"
+                      d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
+                    />
+                  </svg>
+                  Generando análisis para IA…
+                </>
+              ) : (
+                "Confirmar perímetro y generar análisis"
+              )}
+            </button>
+          </div>
+        </div>
+      )}
 
       {isGeneratingAI && (
         <div className="animate-pulse space-y-4 p-6 bg-slate-900/40 rounded-xl border border-slate-700/50">
@@ -659,7 +720,7 @@ export function PhotoAlbum({
                     setAnalysisPolygon={setAnalysisPolygon}
                     manualPois={manualPois}
                     setManualPois={setManualPois}
-                    isPreliminary={!isPreliminaryMapConfirmed}
+                    isPreliminary={false}
                   />
                 </div>
               </div>
