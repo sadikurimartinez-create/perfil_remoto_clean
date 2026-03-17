@@ -561,18 +561,19 @@ export function PhotoAlbum({
           <>
             <button
               type="button"
-              disabled={selectedIds.length === 0}
+              disabled={selectedIds.length === 0 || isAnalyzing}
               className="w-full inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              onClick={() => {
+              onClick={async () => {
                 if (selectedIds.length === 0) {
                   setError("Seleccione al menos una fotografía para generar el mapa preliminar.");
                   return;
                 }
                 setError(null);
+                await handleGenerarAnalisis();
                 setIsPreliminaryMapConfirmed(false);
               }}
             >
-              Generar mapa preliminar
+              {isAnalyzing ? "Generando mapa preliminar..." : "Generar mapa preliminar"}
             </button>
             {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
           </>
