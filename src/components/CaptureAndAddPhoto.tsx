@@ -8,10 +8,10 @@ import { TIPOS_IMAGEN } from "@/context/ProjectContext";
 import { db } from "@/lib/localDb";
 
 const COMPRESSION_OPTIONS = {
-  maxSizeMB: 0.5,
-  maxWidthOrHeight: 1024,
-  useWebWorker: false,
-  initialQuality: 0.65,
+  maxSizeMB: 0.8,
+  maxWidthOrHeight: 1280,
+  useWebWorker: true,
+  initialQuality: 0.7,
   alwaysKeepResolution: true,
 } as const;
 
