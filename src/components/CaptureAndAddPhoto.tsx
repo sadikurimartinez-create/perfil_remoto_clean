@@ -48,6 +48,7 @@ export function CaptureAndAddPhoto() {
   const [comentario, setComentario] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isReading, setIsReading] = useState(false);
+  const [isFetchingGPS, setIsFetchingGPS] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -70,6 +71,7 @@ export function CaptureAndAddPhoto() {
       setPreviewUrl(null);
     }
     setIsReading(true);
+    setIsFetchingGPS(true);
 
     let compressed: File = selected;
     try {
@@ -116,6 +118,7 @@ export function CaptureAndAddPhoto() {
       setError("No se pudieron leer coordenadas. Se usará ubicación por defecto.");
     } finally {
       setIsReading(false);
+      setIsFetchingGPS(false);
     }
   };
 
@@ -179,6 +182,7 @@ export function CaptureAndAddPhoto() {
     if (!project || files.length === 0) return;
 
     setError(null);
+    setIsFetchingGPS(true);
 
     for (const selected of files) {
       let compressed: File = selected;
@@ -266,6 +270,7 @@ export function CaptureAndAddPhoto() {
       );
     }
 
+    setIsFetchingGPS(false);
     e.target.value = "";
   };
 
@@ -368,9 +373,16 @@ export function CaptureAndAddPhoto() {
           <button
             type="button"
             onClick={() => void handleAgregarAlAlbum()}
-            className="btn-primary w-full"
+            disabled={isFetchingGPS}
+            className={`btn-primary w-full ${
+              isFetchingGPS
+                ? "bg-gray-600 opacity-50 cursor-not-allowed animate-pulse"
+                : ""
+            }`}
           >
-            Agregar al álbum
+            {isFetchingGPS
+              ? "Obteniendo coordenadas GPS..."
+              : "Agregar al álbum"}
           </button>
         </div>
       )}

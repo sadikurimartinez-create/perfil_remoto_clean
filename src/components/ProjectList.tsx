@@ -34,8 +34,50 @@ export function ProjectList() {
   const { user, loading } = useAuth();
   const [projects, setProjects] = useState<ProjectWithCount[]>([]);
   const [allAnalyses, setAllAnalyses] = useState<
-    { id: string; projectId: string; content: string; createdAt: number; createdBy?: string }[]
+    {
+      id: string;
+      projectId: string;
+      content: string;
+      createdAt: number;
+      createdBy?: string;
+      attachedPhotos?: string[];
+    }[]
   >([]);
+
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [selectedPreview, setSelectedPreview] = useState<any>(null);
+
+  const handleOpenPreview = async (
+    project: ProjectWithCount,
+    analysis: { content?: string; attachedPhotos?: string[] } | any
+  ) => {
+    const attached = Array.isArray(analysis?.attachedPhotos)
+      ? (analysis.attachedPhotos as string[])
+      : [];
+
+    // Si existe evidencia ya guardada en Firestore, úsala.
+    // Si no, cae a una consulta local rápida desde Dexie (IndexedDB).
+    let photos: string[] = attached;
+    if (!photos.length) {
+      try {
+        const photoRows = await localDb.photos
+          .where("projectId")
+          .equals(project.id)
+          .toArray();
+        photos = photoRows.map((p) => URL.createObjectURL(p.imageBlob));
+      } catch (e) {
+        console.error("[ProjectList] Error obteniendo fotos locales:", e);
+        photos = [];
+      }
+    }
+
+    setSelectedPreview({
+      title: project.name,
+      content: analysis?.content ?? "",
+      photos,
+    });
+    setPreviewModalOpen(true);
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -318,7 +360,7 @@ export function ProjectList() {
                                   ? `${a.content.substring(0, 120)}…`
                                   : a.content}
                               </p>
-                              <div>
+                              <div className="flex flex-wrap gap-2">
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -327,6 +369,13 @@ export function ProjectList() {
                                   className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-700 transition-colors"
                                 >
                                   Vista previa
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleOpenPreview(p, a)}
+                                  className="inline-flex items-center gap-1 rounded-md bg-blue-900/40 text-blue-300 hover:bg-blue-800/50 border border-blue-700/50 px-3 py-1 text-[11px] font-semibold transition-colors"
+                                >
+                                  👁️ Vista Previa y Evidencia
                                 </button>
                               </div>
                             </div>
@@ -370,6 +419,62 @@ export function ProjectList() {
             >
               Cancelar
             </button>
+          </div>
+        </div>
+      )}
+
+      {previewModalOpen && selectedPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-5xl bg-gray-900 border border-gray-700 p-6 rounded-xl shadow-2xl overflow-y-auto max-h-[90vh] relative">
+            <button
+              type="button"
+              onClick={() => setPreviewModalOpen(false)}
+              className="absolute top-3 right-3 inline-flex items-center justify-center rounded-full bg-gray-800 hover:bg-gray-700 text-gray-200 h-8 w-8 text-sm"
+              aria-label="Cerrar vista previa"
+            >
+              ✕
+            </button>
+
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div className="min-w-0">
+                <h3 className="text-xl font-bold text-gray-200 mb-4">
+                  {selectedPreview.title}
+                </h3>
+                <div className="text-gray-200 whitespace-pre-wrap text-sm leading-relaxed">
+                  {selectedPreview.content}
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-gray-400 mt-8 mb-4 border-b border-gray-700 pb-2">
+                  Álbum de Evidencia Fotográfica
+                </h3>
+                {Array.isArray(selectedPreview.photos) &&
+                  selectedPreview.photos.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {selectedPreview.photos.map(
+                      (src: string, idx: number) => (
+                        <div
+                          key={`${src}-${idx}`}
+                          className="aspect-video rounded-lg overflow-hidden border border-gray-700 shadow-md bg-black"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={src}
+                            alt={`Evidencia ${idx + 1}`}
+                            className="object-cover w-full h-full"
+                          />
+                        </div>
+                      )
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500">
+                    No se encontró evidencia fotográfica para este análisis.
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
