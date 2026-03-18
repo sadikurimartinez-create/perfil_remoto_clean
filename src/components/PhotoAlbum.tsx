@@ -125,6 +125,8 @@ export function PhotoAlbum({
   const recognitionRef = useRef<any | null>(null);
   const lastTranscriptRef = useRef<string>("");
   const [visionData, setVisionData] = useState<Record<string, { faces: { count: number; headwear: boolean }; extractedText: string }>>({});
+  const [debugData, setDebugData] = useState<any>(null);
+  const [showMonitor, setShowMonitor] = useState(false);
 
   const uploadSelectedPhotosToStorage = async (
     projectId: string,
@@ -189,6 +191,14 @@ export function PhotoAlbum({
           };
         })
       );
+
+      // Capturamos los datos crudos que se mandarán a los endpoints
+      setDebugData({
+        photos: photosPayload,
+        analysisRadius,
+        analysisContext,
+        focusAreas,
+      });
 
       const res = await fetch("/api/analyze-selection", {
         method: "POST",
@@ -744,7 +754,26 @@ export function PhotoAlbum({
           )}
         </button>
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
+        <button
+          type="button"
+          onClick={() => setShowMonitor(!showMonitor)}
+          className="text-xs text-gray-500 hover:text-blue-400 flex items-center gap-1 mt-2"
+        >
+          👁️{" "}
+          {showMonitor ? "Ocultar Monitor de Ingesta" : "Ver Datos Crudos (Auditoría)"}
+        </button>
       </div>
+
+      {showMonitor && debugData && (
+        <div className="mt-4 p-4 bg-black border border-green-900 rounded-md overflow-x-auto max-h-96 overflow-y-auto">
+          <h4 className="text-green-500 text-xs font-mono mb-2 border-b border-green-900 pb-1">
+            DATOS EXTRAÍDOS PARA LA IA:
+          </h4>
+          <pre className="text-green-400 text-[10px] sm:text-xs font-mono whitespace-pre-wrap">
+            {JSON.stringify(debugData, null, 2)}
+          </pre>
+        </div>
+      )}
 
       {isGeneratingAI && (
         <div className="animate-pulse space-y-4 p-6 bg-slate-900/40 rounded-xl border border-slate-700/50">
