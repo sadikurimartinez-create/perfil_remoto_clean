@@ -390,6 +390,13 @@ function buildPromptForGemini(params: {
     analysisContext?.trim() ||
     "[El analista no proporcionó hipótesis ni contexto adicional.]";
 
+  const clasificacionesTexto = photos
+    .map(
+      (p, idx) =>
+        `Foto ${idx + 1}: ${p.tipo || "Sin clasificación humana registrada."}`
+    )
+    .join("\n");
+
   const visionTacticaTexto = visionDataTactica
     ? `Inteligencia Visual Automatizada: en las fotografías de la escena se ha detectado mediante OCR el siguiente texto (evalúa si corresponden a placas vehiculares o números económicos de taxis/patrullas): "${visionDataTactica.texto}". Además, se detectó la presencia de ${visionDataTactica.rostros} rostro(s). Cruza esta información con los Puntos de Interés (POIs) y la incidencia delictiva. Analiza si la presencia de estos vehículos o individuos coincide con tácticas de 'halconeo', transporte pirata o vigilancia en la zona.`
     : "Inteligencia Visual Automatizada: no se detectó texto relevante ni rostros significativos en las imágenes procesadas.";
@@ -400,6 +407,9 @@ ${comentariosInvestigador}
 
 ## HIPÓTESIS O CONTEXTO DEL ANALISTA (incorporar en el análisis)
 ${hipotesisTexto}
+
+## CLASIFICACIÓN HUMANA DE LA EVIDENCIA
+${clasificacionesTexto}
 
 ## UBICACIÓN (Geocoding)
 ${direccionTexto}

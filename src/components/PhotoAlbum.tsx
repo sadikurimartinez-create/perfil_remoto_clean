@@ -98,7 +98,8 @@ export function PhotoAlbum({
     togglePhotoSelection,
     selectAllPhotos,
     clearSelection,
-    setAnalysisResult
+    setAnalysisResult,
+    updatePhotoMeta,
   } = useProject();
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -655,6 +656,35 @@ export function PhotoAlbum({
                       👤 Rostros: {visionData[p.id].faces.count}
                     </span>
                   )}
+                  <select
+                    value={p.tipo}
+                    onChange={(e) =>
+                      updatePhotoMeta(p.id, {
+                        tipo: e.target.value,
+                        comentario: p.comentario,
+                      })
+                    }
+                    className="w-full mt-2 bg-gray-800 text-gray-200 border border-gray-600 rounded-md p-1 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="">Selecciona clasificación...</option>
+                    <option value="Escuela / Entorno Educativo">
+                      Escuela / Entorno Educativo
+                    </option>
+                    <option value="Templo / Centro Religioso">
+                      Templo / Centro Religioso
+                    </option>
+                    <option value="Comercio / Negocio">
+                      Comercio / Negocio
+                    </option>
+                    <option value="Terreno Baldío / Abandono">
+                      Terreno Baldío / Abandono
+                    </option>
+                    <option value="Vivienda">Vivienda</option>
+                    <option value="Vía Pública / Callejón">
+                      Vía Pública / Callejón
+                    </option>
+                    <option value="Otro">Otro</option>
+                  </select>
                   <p className="text-[9px] font-mono tracking-tight text-blue-300">
                     {p.lat != null && p.lng != null && !Number.isNaN(p.lat) && !Number.isNaN(p.lng)
                       ? `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`
@@ -721,62 +751,6 @@ export function PhotoAlbum({
         )}
       </div>
 
-      {showPreliminaryMap && !isPreliminaryMapConfirmed && (
-        <div className="space-y-4 pt-4 border-t-2 border-emerald-500/60 bg-slate-900/70 rounded-xl p-4 border border-slate-700/60">
-          <h4 className="text-base font-bold text-emerald-300 font-mono tracking-tight">
-            Mapa preliminar táctico
-          </h4>
-          <p className="text-xs text-slate-400">
-            Revise la geolocalización de las fotografías seleccionadas, trace el perímetro de estudio y agregue POIs manuales antes de solicitar el análisis de IA.
-          </p>
-          <div className="mt-2 rounded-xl border border-slate-300 bg-white text-black overflow-hidden min-h-[320px]">
-            <div className="relative p-2">
-              <AnalysisMap
-                album={album.filter((p) => selectedIds.includes(p.id))}
-                analysisResult={null}
-                analysisRadius={analysisRadius}
-                analysisPolygon={analysisPolygon}
-                setAnalysisPolygon={setAnalysisPolygon}
-                manualPois={manualPois}
-                setManualPois={setManualPois}
-                isPreliminary={true}
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2 mt-3">
-            <button
-              type="button"
-              onClick={async () => {
-                setError(null);
-                await handleGenerarAnalisis();
-                setIsPreliminaryMapConfirmed(true);
-                setShowPreliminaryMap(false);
-              }}
-              className="inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-xs font-semibold text-white hover:bg-emerald-500 transition-colors"
-            >
-              {isAnalyzing ? (
-                <>
-                  <svg
-                    className="mr-2 h-3 w-3 animate-spin text-slate-100"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      className="opacity-25"
-                      fill="currentColor"
-                      d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
-                    />
-                  </svg>
-                  Generando análisis para IA…
-                </>
-              ) : (
-                "Confirmar perímetro y generar análisis"
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
       {isGeneratingAI && (
         <div className="animate-pulse space-y-4 p-6 bg-slate-900/40 rounded-xl border border-slate-700/50">
           <div className="h-4 bg-slate-700 rounded w-3/4" />
@@ -786,7 +760,7 @@ export function PhotoAlbum({
         </div>
       )}
 
-      {analysisResult && isPreliminaryMapConfirmed && (
+      {analysisResult && (
         <div className="space-y-4 pt-4 border-t-2 border-sky-500/50 bg-slate-900/60 backdrop-blur-md border border-slate-700/50 rounded-xl p-4">
           <h4 className="text-base font-bold text-sky-200 font-mono tracking-tight">
             Perfil criminológico generado
