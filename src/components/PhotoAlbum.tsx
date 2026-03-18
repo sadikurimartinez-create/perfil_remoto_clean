@@ -764,14 +764,20 @@ export function PhotoAlbum({
         </button>
       </div>
 
-      {showMonitor && debugData && (
+      {showMonitor && (
         <div className="mt-4 p-4 bg-black border border-green-900 rounded-md overflow-x-auto max-h-96 overflow-y-auto">
           <h4 className="text-green-500 text-xs font-mono mb-2 border-b border-green-900 pb-1">
             DATOS EXTRAÍDOS PARA LA IA:
           </h4>
-          <pre className="text-green-400 text-[10px] sm:text-xs font-mono whitespace-pre-wrap">
-            {JSON.stringify(debugData, null, 2)}
-          </pre>
+          {debugData ? (
+            <pre className="text-green-400 text-[10px] sm:text-xs font-mono whitespace-pre-wrap">
+              {JSON.stringify(debugData, null, 2)}
+            </pre>
+          ) : (
+            <p className="text-green-700 text-[11px] font-mono">
+              Aún no hay datos capturados. Genere un análisis para ver el payload que se enviará a la IA.
+            </p>
+          )}
         </div>
       )}
 
