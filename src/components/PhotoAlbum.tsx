@@ -683,6 +683,12 @@ export function PhotoAlbum({
                     <option value="Vía Pública / Callejón">
                       Vía Pública / Callejón
                     </option>
+                    <option value="Rostro / Persona de Interés">
+                      Rostro / Persona de Interés
+                    </option>
+                    <option value="Placa Vehicular / Número Económico">
+                      Placa Vehicular / Número Económico
+                    </option>
                     <option value="Otro">Otro</option>
                   </select>
                   <p className="text-[9px] font-mono tracking-tight text-blue-300">
@@ -698,57 +704,34 @@ export function PhotoAlbum({
       </div>
 
       <div className="pt-2 border-t border-slate-800 space-y-2">
-        {!isPreliminaryMapConfirmed ? (
-          <>
-            <button
-              type="button"
-              disabled={selectedIds.length === 0}
-              className="w-full inline-flex items-center justify-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-              onClick={() => {
-                if (selectedIds.length === 0) {
-                  setError("Seleccione al menos una fotografía para generar el mapa preliminar.");
-                  return;
-                }
-                setError(null);
-                setShowPreliminaryMap(true);
-              }}
-            >
-              Generar mapa preliminar
-            </button>
-            {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              onClick={handleGenerateAIProfile}
-              disabled={isGeneratingAI || selectedIds.length === 0}
-              className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isGeneratingAI ? (
-                <>
-                  <svg
-                    className="mr-2 h-4 w-4 animate-spin text-slate-100"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      className="opacity-25"
-                      fill="currentColor"
-                      d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
-                    />
-                  </svg>
-                  Procesando inteligencia... Por favor espere
-                </>
-              ) : aiProfile ? (
-                "Análisis Generado"
-              ) : (
-                "Generar Análisis Criminológico"
-              )}
-            </button>
-            {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
-          </>
-        )}
+        <button
+          type="button"
+          onClick={handleGenerateAIProfile}
+          disabled={isGeneratingAI || selectedIds.length === 0}
+          className="w-full inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          {isGeneratingAI ? (
+            <>
+              <svg
+                className="mr-2 h-4 w-4 animate-spin text-slate-100"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  className="opacity-25"
+                  fill="currentColor"
+                  d="M12 2a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0V3a1 1 0 0 1 1-1Zm0 15a1 1 0 0 1 1 1v3a1 1 0 1 1-2 0v-3a1 1 0 0 1 1-1Zm7-5a1 1 0 0 1 1 1 8 8 0 0 1-8 8 1 1 0 1 1 0-2 6 6 0 0 0 6-6 1 1 0 0 1 1-1Zm-7-8a8 8 0 0 1 8 8 1 1 0 1 1-2 0 6 6 0 0 0-6-6 1 1 0 1 1 0-2Z"
+                />
+              </svg>
+              Procesando inteligencia... Por favor espere
+            </>
+          ) : aiProfile ? (
+            "Análisis Generado"
+          ) : (
+            "Generar Análisis Criminológico"
+          )}
+        </button>
+        {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 
       {isGeneratingAI && (
