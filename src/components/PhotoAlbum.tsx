@@ -326,6 +326,43 @@ export function PhotoAlbum({
         setAnalysisResult(mapData);
       }
 
+      // Incidencia local (1km) + marco teórico (bibliografía) para auditoría y Gemini
+      let incidenciaLocal: any[] = [];
+      let bibliografiaLocal = "";
+      try {
+        const first = selected[0];
+        const lat =
+          typeof first?.lat === "number" && !Number.isNaN(first.lat)
+            ? first.lat
+            : 21.8818;
+        const lng =
+          typeof first?.lng === "number" && !Number.isNaN(first.lng)
+            ? first.lng
+            : -102.2915;
+
+        const incidenciaRes = await fetch("/api/incidencia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat, lng }),
+        });
+
+        if (incidenciaRes.ok) {
+          const incidenciaJson = (await incidenciaRes.json()) as {
+            data?: any[];
+            bibliografia?: string;
+          };
+          incidenciaLocal = incidenciaJson.data ?? [];
+          bibliografiaLocal = incidenciaJson.bibliografia ?? "";
+          setDebugData((prev: any) => ({
+            ...(prev ?? {}),
+            incidencia: incidenciaLocal,
+            bibliografia: bibliografiaLocal,
+          }));
+        }
+      } catch (e) {
+        console.error("[PhotoAlbum] Error /api/incidencia:", e);
+      }
+
       try {
         const res = await fetch("/api/generate-profile", {
           method: "POST",
@@ -335,6 +372,8 @@ export function PhotoAlbum({
             analysisContext,
             analysisRadius,
             focusAreas,
+            incidenciaLocal,
+            bibliografiaLocal,
           }),
         });
 

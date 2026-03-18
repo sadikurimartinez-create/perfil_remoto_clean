@@ -120,6 +120,10 @@ type GenerateProfileBody = {
     texto: string;
     rostros: number;
   };
+  /** Incidencia adicional (filtrada a 1KM) enviada desde el endpoint /api/incidencia (auditoría). */
+  incidenciaLocal?: any[];
+  /** Bibliografía adicional (concatenada desde carpetas protegidas) enviada desde /api/incidencia (auditoría). */
+  bibliografiaLocal?: string;
 };
 
 type GeocodingResult = {
@@ -160,7 +164,10 @@ async function readBibliographyContext(): Promise<string> {
   }
 }
 
-function getGeminiModel(bibliographyContext: string) {
+function getGeminiModel(
+  bibliographyContext: string,
+  marcoTeoriaReglas?: string
+) {
   const fromModule = (GEMINI_KEY && GEMINI_KEY.trim()) || "";
   const fromProcess =
     (typeof process.env.NEXT_PUBLIC_GEMINI_API_KEY === "string" && process.env.NEXT_PUBLIC_GEMINI_API_KEY.trim()) ||
@@ -182,7 +189,7 @@ function getGeminiModel(bibliographyContext: string) {
       "Fundamentas el análisis en cuatro marcos: Actividades Rutinarias, Patrón Delictivo, Elección Racional y Teoría de Ventanas Rotas. " +
       "Basa terminología y argumentos ESTRICTAMENTE en la bibliografía y manuales institucionales proporcionados; no inventes teorías ni citas que no figuren en ellos.\n\n" +
       "Reglas de redacción: (1) Usa párrafos breves y encabezados claros. (2) Evita repeticiones; cada idea en un solo lugar. (3) Distingue hechos observados o datos (geocoding, incidencia, POIs) de interpretación criminológica. (4) Las recomendaciones deben ser accionables y vinculadas al análisis. (5) El apartado final INFORMACIÓN PREDICTIVA debe cuantificar o calificar el riesgo a 6 meses y justificarlo con los elementos del perfil.\n\n" +
-      (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
+      `${marcoTeoriaReglas || ""}\n\n` + (bibliographyContext || "[No se proporcionó bibliografía adicional.]"),
   });
 }
 
@@ -467,6 +474,9 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as GenerateProfileBody;
     const { photos } = body;
+    const incidenciaLocal = body.incidenciaLocal ?? [];
+    const bibliografiaLocal =
+      typeof body.bibliografiaLocal === "string" ? body.bibliografiaLocal : "";
 
     if (!Array.isArray(photos) || photos.length === 0) {
       return NextResponse.json(
@@ -720,7 +730,16 @@ export async function POST(req: Request) {
       visionDataTactica: (body as any).visionDataTactica ?? undefined,
     });
 
-    const model = getGeminiModel(bibliographyContext);
+    const marcoTeoriaReglas =
+      bibliografiaLocal?.trim() && Array.isArray(incidenciaLocal)
+        ? "MARCO TEÓRICO Y REGLAS PERICIALES: Ten en cuenta la siguiente bibliografía oficial para fundamentar tu dictamen: \n" +
+          `${bibliografiaLocal}\n\n` +
+          "BASE DE DATOS POLICIAL (Radio 1KM): Se han registrado los siguientes incidentes en la zona extraídos de múltiples fuentes: " +
+          `${JSON.stringify(incidenciaLocal)}. ` +
+          "Tienes la obligación de cruzar esta información táctica con los hallazgos visuales de las fotos y la teoría criminológica para tu dictamen."
+        : "";
+
+    const model = getGeminiModel(bibliographyContext, marcoTeoriaReglas);
     let markdown = "";
     try {
       const result = await model.generateContent(prompt);
