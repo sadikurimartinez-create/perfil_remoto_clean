@@ -16,6 +16,7 @@ import {
   doc,
   onSnapshot,
   query,
+  updateDoc,
   where,
 } from "firebase/firestore";
 import { getDb } from "@/lib/firebase";
@@ -141,6 +142,18 @@ export default function ProjectWorkspacePage() {
       createdBy: user.username,
       attachedPhotos: attachedPhotos ?? [],
     });
+    // Actualizar contador de fotos del proyecto en Firestore
+    try {
+      const projectRef = doc(db, "projects", projectId);
+      await updateDoc(projectRef, {
+        photoCount: album.length,
+      });
+    } catch (e) {
+      console.error(
+        "[ProjectWorkspacePage] No se pudo actualizar photoCount del proyecto:",
+        e
+      );
+    }
   };
 
   return (

@@ -81,6 +81,7 @@ export function ProjectList() {
           content: (data.content as string) ?? "",
           createdAt: (data.createdAt as number) ?? 0,
           createdBy: data.createdBy as string | undefined,
+          attachedPhotos: (data.attachedPhotos as string[] | undefined) ?? [],
         };
       });
       setAllAnalyses(list);
@@ -232,6 +233,14 @@ export function ProjectList() {
                 const analysesForProject = allAnalyses.filter(
                   (a) => a.projectId === p.id
                 );
+                const photosFromAnalyses = analysesForProject.reduce(
+                  (acc, a: any) =>
+                    acc +
+                    (((a.attachedPhotos as string[] | undefined)?.length ??
+                      0) as number),
+                  0
+                );
+                const photoCountDisplay = Math.max(p.photoCount, photosFromAnalyses);
                 return (
                   <li
                     key={p.id}
@@ -250,7 +259,8 @@ export function ProjectList() {
                         })}
                       </p>
                       <p className="text-xs text-slate-400 mt-1">
-                        {p.photoCount} {p.photoCount === 1 ? "foto" : "fotos"}
+                        {photoCountDisplay}{" "}
+                        {photoCountDisplay === 1 ? "foto" : "fotos"}
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
                         Creado por:{" "}
@@ -288,7 +298,7 @@ export function ProjectList() {
                           {analysesForProject.slice(0, 3).map((a) => (
                             <div
                               key={a.id}
-                              className="bg-slate-900/50 p-3 rounded-md border border-slate-800"
+                              className="bg-slate-900/50 p-3 rounded-md border border-slate-800 flex flex-col gap-2"
                             >
                               <p className="text-[11px] text-sky-400 font-semibold">
                                 {new Date(a.createdAt).toLocaleString("es-MX", {
@@ -303,11 +313,22 @@ export function ProjectList() {
                                   {a.createdBy || "Usuario no identificado"}
                                 </span>
                               </p>
-                              <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                              <p className="text-xs text-slate-300 line-clamp-2">
                                 {a.content.length > 120
                                   ? `${a.content.substring(0, 120)}…`
                                   : a.content}
                               </p>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    router.push(`/project/${p.id}`);
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-2 py-1 text-[11px] font-semibold text-slate-100 hover:bg-slate-700 transition-colors"
+                                >
+                                  Vista previa
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>

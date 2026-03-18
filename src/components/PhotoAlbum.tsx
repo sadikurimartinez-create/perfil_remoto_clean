@@ -232,12 +232,24 @@ export function PhotoAlbum({
     setError(null);
     try {
       if (onSaveAnalysisToCloud) {
-        const photoUrls = await uploadSelectedPhotosToStorage(
-          projectId,
-          selectedIds
-        );
-        await onSaveAnalysisToCloud(editableProfile, photoUrls);
-        setHasSavedAnalysis(true);
+        // Versión robusta y rápida: se guarda siempre el texto del dictamen
+        // y no se bloquea el UI intentando subir fotos pesadas.
+        try {
+          await onSaveAnalysisToCloud(editableProfile, []);
+          setHasSavedAnalysis(true);
+        } catch (saveErr) {
+          console.error(
+            "[PhotoAlbum] Error guardando análisis en Firestore (solo texto):",
+            saveErr
+          );
+          setError(
+            saveErr instanceof Error
+              ? saveErr.message
+              : "No se pudo guardar el análisis en el expediente."
+          );
+          setHasSavedAnalysis(false);
+          return;
+        }
       }
     } catch (err) {
       console.error("[PhotoAlbum] Error al guardar análisis:", err);
